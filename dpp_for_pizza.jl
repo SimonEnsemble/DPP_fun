@@ -304,7 +304,7 @@ function mcmc_kdpp(
 		###
 		# accept or reject
 		###
-		if rand() < new_det / current_det
+		if rand() < 0.5 * (new_det / current_det)
 			@debug "\tACCEPT!"
 			ids = new_ids
 			current_det = new_det
