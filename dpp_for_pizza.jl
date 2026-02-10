@@ -261,6 +261,15 @@ function sample_new_item(
 	return id
 end
 
+# ╔═╡ b5ea1703-3864-4c5d-96d6-e50ad00d076f
+function overlap(pᵢ, pⱼ, pepperoni_radius)
+	d = distance(pᵢ, pⱼ)
+	if d < 2 * pepperoni_radius
+		return true
+	end
+    return false
+end
+
 # ╔═╡ 90d2b32a-a50d-4e8c-a0a1-00b4849213f9
 function mcmc_kdpp(
 	# item-item similarity matrix (psd)
@@ -275,7 +284,7 @@ function mcmc_kdpp(
 
 	# initial sample
 	ids = sample(1:n, k, replace=false)
-
+	
 	# current det(Lₓ)
 	current_det = det(L[ids, ids])
 	
@@ -290,12 +299,37 @@ function mcmc_kdpp(
 		# index of current item we propose to replace
 		id_replace_item = sample(1:k)
 
-		# new item outside of ids to replace it with
-		id_new_item = sample_new_item(ids, n)
-
-		# proposed new current set
-		new_ids = deepcopy(ids)
+		# new item outside of ids to replace it with 
+		id_new_item = sample_new_item(ids, n) 
+		# proposed new current set 
+		new_ids = copy(ids) 
 		new_ids[id_replace_item] = id_new_item
+
+		# # if overlap, reject
+		# while true
+		#     # new item outside of ids to replace it with 
+		# 	id_new_item = sample_new_item(ids, n) 
+		# 	# proposed new current set 
+		# 	new_ids = copy(ids) 
+		# 	new_ids[id_replace_item] = id_new_item
+			
+		#     hit = false
+		  #   for id in new_ids
+		  #       if id == id_new_item 
+				# 	continue
+				# end
+		  #       if overlap(candidate_pepperonis[id_new_item],
+		  #                  candidate_pepperonis[id],
+		  #                  pepperoni_radius)
+		  #           hit = true
+		  #           break
+		  #       end
+		  #   end
+		
+		  #   if !hit
+		  #       break
+		  #   end
+		# end
 
 		# new det
 		new_det = det(L[new_ids, new_ids])
@@ -341,6 +375,109 @@ pizza_dpp = Pizza(
 # ╔═╡ 84369ce0-b19b-4b6b-b876-3872c57a8bf9
 viz_pizza(pizza_dpp)
 
+# ╔═╡ ba3970f3-8b78-40a1-ac58-09d553568a5b
+md"# 📈 Ripley KL"
+
+# ╔═╡ 7e430a28-5060-4cc1-9c33-027312f77de6
+function ripley_KL(
+	pepperonis, rs, 
+	pizza_radius=pizza_radius, 
+	crust_radius=crust_radius, 
+	n_pepperoni=n_pepperoni
+)
+	# area of pizza
+	r_pizza = pizza_radius - crust_radius
+    area = π * (pizza_radius - crust_radius)^2
+	# density of pepperoni
+    ρ = n_pepperoni / area
+    # distance from pepperoni to boundary R - ||x_i||
+	p_ref = Pepperoni(pepperoni_radius, 0.0, 0.0)
+    dis_to_boun = [r_pizza - distance(p, p_ref) for p in pepperonis]
+
+    K = Float64[]
+    L = Float64[]
+
+    for r in rs
+        # eligible centers: avoid being too close to the boundary
+        eligible = findall(i -> dis_to_boun[i] ≥ r, 1:n_pepperoni)
+        n_eligible = length(eligible)
+
+        # if too close to the boundary
+        if n_eligible == 0
+            push!(K, NaN)
+            push!(L, NaN)
+            continue
+        end
+
+        # # of neighbors
+        n_neighbors = 0
+        for ii in eligible
+            pᵢ = pepperonis[ii]
+            for j in 1:n_pepperoni
+                if j == ii
+                    continue
+                end
+                pⱼ = pepperonis[j]
+                if distance(pᵢ, pⱼ)≤ r
+                    n_neighbors += 1
+                end
+            end
+        end
+
+        # Khat(r) = n_neighbors / (ρ * n_eligible)
+        Khat = n_neighbors / (ρ * n_eligible)
+        push!(K, Khat)
+        # Lhat(r) = sqrt(Khat/π) if Possion, then K=πr^2
+        Lhat = sqrt(Khat / π)
+        push!(L, Lhat)
+    end
+
+    # return L-r
+	# for small r, smaller (more negative) Lminus indicates a better result,
+	# meaning they are less likely to overlap
+    Lminus = L .- collect(rs)
+    return Lminus
+end
+
+# ╔═╡ 10a7b224-2183-4dc9-b705-8e8cc86f11e5
+rs = 2.0:1.0:15.0
+
+# ╔═╡ aa4ce441-ed21-42b3-9293-f1bfeba92d80
+Lminus = ripley_KL(
+	candidate_pepperonis[ids_dpp], rs
+)
+
+# ╔═╡ 17120eb6-c9d6-4a1a-a212-6502e04cf12f
+begin
+	n_run = 100
+	ripley_KL_list = [[] for n in 1:n_run]
+	for n in 1:n_run
+		ids_dpp_run = with_logger(ConsoleLogger(stdout, Logging.Info)) do
+		mcmc_kdpp(L, n_pepperoni; n_steps=150000)
+	end
+		ripley_KL_list[n] = ripley_KL(candidate_pepperonis[ids_dpp_run], rs)
+	end
+end
+
+# ╔═╡ 84006c38-eb13-4b51-8b3f-c093e8179eea
+ripley_KL_mean = mean(ripley_KL_list, dims=1)[1]
+
+# ╔═╡ bf2c60fc-c527-464b-81ae-75810cf48704
+function viz_ripley_KL(rs, Lminus::Vector{Float64}, title)
+	fig = Figure()
+	ax = Axis(
+		fig[1, 1], xlabel="radius", ylabel="ripley K/L", title=title
+	)
+	lines!(rs, Lminus)
+	fig
+end
+
+# ╔═╡ 99e111ef-8064-40f2-82bd-ce9c292e423f
+viz_ripley_KL(rs, ripley_KL_mean, "with lazy")
+
+# ╔═╡ cb40adff-88b3-44cb-83a8-63105263b466
+viz_ripley_KL(rs, ripley_KL(pizza_uniform.pepperonis, rs), "uniform")
+
 # ╔═╡ Cell order:
 # ╠═84d15bb4-05f1-11f1-97e9-2d44dcee1c9d
 # ╟─83fa5b7f-1049-42ed-b774-027b48732760
@@ -374,8 +511,18 @@ viz_pizza(pizza_dpp)
 # ╠═19b16e44-560b-41db-9f5f-dd1f866ee296
 # ╠═9ff71c87-f48f-4a3a-bb52-1236883b889f
 # ╠═c1ae2e45-e7a2-4988-a31a-3bb5a0eb83a0
+# ╠═b5ea1703-3864-4c5d-96d6-e50ad00d076f
 # ╠═90d2b32a-a50d-4e8c-a0a1-00b4849213f9
 # ╠═a672c27c-8887-4e2e-92dd-cb8077a25f33
 # ╠═66bb6dbb-1ed1-4754-a5e3-7445f77e8dae
 # ╠═d719e69b-d649-4b34-91ff-d50f355df1ce
 # ╠═84369ce0-b19b-4b6b-b876-3872c57a8bf9
+# ╟─ba3970f3-8b78-40a1-ac58-09d553568a5b
+# ╠═7e430a28-5060-4cc1-9c33-027312f77de6
+# ╠═10a7b224-2183-4dc9-b705-8e8cc86f11e5
+# ╠═aa4ce441-ed21-42b3-9293-f1bfeba92d80
+# ╠═17120eb6-c9d6-4a1a-a212-6502e04cf12f
+# ╠═84006c38-eb13-4b51-8b3f-c093e8179eea
+# ╠═bf2c60fc-c527-464b-81ae-75810cf48704
+# ╠═99e111ef-8064-40f2-82bd-ce9c292e423f
+# ╠═cb40adff-88b3-44cb-83a8-63105263b466
