@@ -29,7 +29,7 @@ end
 md"# 🍕 settings"
 
 # ╔═╡ 3b1213bb-4eb6-48fb-b2b4-b99d95a29fe7
-pepperoni_radius = 2.5 # cm
+pepperoni_radius = 3.0 # cm
 
 # ╔═╡ 1eb2a72f-cabc-4a6a-89a4-5886be46868a
 pizza_radius = 35.0 # cm
@@ -38,19 +38,23 @@ pizza_radius = 35.0 # cm
 crust_radius = 3.25 # cm
 
 # ╔═╡ 2ca3e543-a87e-4a59-812d-8401cb358e0c
-γ = pizza_radius / 2 # cm
+γ = pizza_radius # cm
 
 # ╔═╡ 179863df-2049-43c4-9c88-3c17c7f93828
 md"# 🍕 pepperoni & the pepperoni kernel"
 
 # ╔═╡ 42a405f0-b267-4f6a-a7f9-df90831176f0
-struct Pepperoni
-	# radius
-	radius::Float64
+begin
+	struct Pepperoni
+		# radius
+		radius::Float64
+		
+		# center
+		x::Float64
+		y::Float64
+	end
 	
-	# center
-	x::Float64
-	y::Float64
+	Pepperoni() = Pepperoni(NaN, NaN, NaN)
 end
 
 # ╔═╡ c710b421-45c1-4b24-80fe-d9bc3ec7d4b6
@@ -204,6 +208,26 @@ viz_pizza(
 	title="candidate pepperoni placements"
 )
 
+# ╔═╡ 4e5b7264-f445-4dd3-af55-6f4304ac5306
+md"## filter candidates by overlaps"
+
+# ╔═╡ 7b3efafb-78be-4707-a9b8-719ad9ce37e9
+# function filter_non_overlapping_candidates(
+# 	# current pepperonis
+# 	pepperonis::Vector{Pepperoni},
+# 	# candidate pepperonis
+# 	candidate_pepperonis::Vector{Pepperoni}
+# )
+# 	ids_valid = Int[]
+# 	for i = 1:length(candidate_pepperonis)
+# 		for p in pepperonis
+# 			if overlap(p, candidate_pepperonis[i])
+# 			end
+# 		end
+# 	end
+# 	return ids_valid
+# end
+
 # ╔═╡ f425afb3-a4d4-4cf7-98f6-8e73be0e388d
 md"# 🍕 uniform sampling"
 
@@ -219,6 +243,9 @@ pizza_uniform = Pizza(
 
 # ╔═╡ 5903739f-e31d-4c50-bde4-93c0f6675970
 viz_pizza(pizza_uniform, title="uniform design")
+
+# ╔═╡ 53050347-14a1-4efc-82de-59d0813adeb8
+pizza_uniform.pepperonis[1]
 
 # ╔═╡ 941f16c2-a778-4904-8d3d-9bb031b5ae9d
 md"# 🍕 k-DPP"
@@ -261,15 +288,6 @@ function sample_new_item(
 	return id
 end
 
-# ╔═╡ b5ea1703-3864-4c5d-96d6-e50ad00d076f
-function overlap(pᵢ, pⱼ, pepperoni_radius)
-	d = distance(pᵢ, pⱼ)
-	if d < 2 * pepperoni_radius
-		return true
-	end
-    return false
-end
-
 # ╔═╡ 90d2b32a-a50d-4e8c-a0a1-00b4849213f9
 function mcmc_kdpp(
 	# item-item similarity matrix (psd)
@@ -277,7 +295,9 @@ function mcmc_kdpp(
 	# number of items to select
 	k::Int;
 	# MCMC steps
-	n_steps::Int=10000
+	n_steps::Int=10000,
+	# allow overlap?
+	allow_overlap::Bool=true
 )
 	# infer the number of items
 	n = size(L)[1]
@@ -293,6 +313,7 @@ function mcmc_kdpp(
 		@debug "step $s"
 		@debug "\tids = $ids"
 		@debug "\tcurrent det L = $current_det"
+		
 		###
 		# propose an exchange move
 		###
@@ -300,36 +321,11 @@ function mcmc_kdpp(
 		id_replace_item = sample(1:k)
 
 		# new item outside of ids to replace it with 
-		id_new_item = sample_new_item(ids, n) 
+		id_new_item = sample_new_item(ids, n)
+		
 		# proposed new current set 
 		new_ids = copy(ids) 
 		new_ids[id_replace_item] = id_new_item
-
-		# # if overlap, reject
-		# while true
-		#     # new item outside of ids to replace it with 
-		# 	id_new_item = sample_new_item(ids, n) 
-		# 	# proposed new current set 
-		# 	new_ids = copy(ids) 
-		# 	new_ids[id_replace_item] = id_new_item
-			
-		#     hit = false
-		  #   for id in new_ids
-		  #       if id == id_new_item 
-				# 	continue
-				# end
-		  #       if overlap(candidate_pepperonis[id_new_item],
-		  #                  candidate_pepperonis[id],
-		  #                  pepperoni_radius)
-		  #           hit = true
-		  #           break
-		  #       end
-		  #   end
-		
-		  #   if !hit
-		  #       break
-		  #   end
-		# end
 
 		# new det
 		new_det = det(L[new_ids, new_ids])
@@ -374,6 +370,64 @@ pizza_dpp = Pizza(
 
 # ╔═╡ 84369ce0-b19b-4b6b-b876-3872c57a8bf9
 viz_pizza(pizza_dpp)
+
+# ╔═╡ 826e374d-1f6e-4e72-a9f6-165a8ae0686c
+md"## statistical analysis of DPP vs uniform"
+
+# ╔═╡ 10135e58-4de0-4a4a-96ac-8477e0ff9352
+function get_pairwise_pepperoni_distances(pizza::Pizza)
+	n = length(pizza.pepperonis)
+	return [
+		distance(pizza.pepperonis[i], pizza.pepperonis[j]) 
+		for i = 1:n for j = (i+1):n
+	]
+end
+
+# ╔═╡ b5ea1703-3864-4c5d-96d6-e50ad00d076f
+overlap(pᵢ, pⱼ) = distance(pᵢ, pⱼ) < pᵢ.radius + pⱼ.radius
+
+# ╔═╡ eac7d700-7495-46d7-9343-8d9c1d962a5b
+function nb_pairs_overlapping(pizza::Pizza)
+	n = length(pizza.pepperonis)
+	n_overlaps = 0
+	for i = 1:n
+		for j = (i+1):n
+			if overlap(pizza.pepperonis[i], pizza.pepperonis[j])
+				n_overlaps += 1
+			end
+		end
+	end
+	return n_overlaps
+end
+
+# ╔═╡ e8701378-ef4c-4493-b1c3-bd9078f717c1
+nb_pairs_overlapping(pizza_uniform)
+
+# ╔═╡ f6867941-5f28-4030-b9c8-0e29402b2cc6
+nb_pairs_overlapping(pizza_dpp)
+
+# ╔═╡ 1fc8d00f-4308-4fa5-93f0-602144d163f3
+begin
+	local fig = Figure()
+	local ax = Axis(
+		fig[1, 1], 
+		xlabel="pairwise distance [cm]", 
+		ylabel="# pepperoni pairs"
+	)
+
+
+	density!(
+		get_pairwise_pepperoni_distances(pizza_uniform), 
+		label="uniform", color=(colors[1], 0.5)
+	)
+	density!(
+		get_pairwise_pepperoni_distances(pizza_dpp), 
+		label="DPP", color=(colors[2], 0.5)
+	)
+	
+	axislegend()
+	fig
+end
 
 # ╔═╡ ba3970f3-8b78-40a1-ac58-09d553568a5b
 md"# 📈 Ripley KL"
@@ -448,6 +502,8 @@ Lminus = ripley_KL(
 )
 
 # ╔═╡ 17120eb6-c9d6-4a1a-a212-6502e04cf12f
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	n_run = 100
 	ripley_KL_list = [[] for n in 1:n_run]
@@ -458,9 +514,12 @@ begin
 		ripley_KL_list[n] = ripley_KL(candidate_pepperonis[ids_dpp_run], rs)
 	end
 end
+  ╠═╡ =#
 
 # ╔═╡ 84006c38-eb13-4b51-8b3f-c093e8179eea
+#=╠═╡
 ripley_KL_mean = mean(ripley_KL_list, dims=1)[1]
+  ╠═╡ =#
 
 # ╔═╡ bf2c60fc-c527-464b-81ae-75810cf48704
 function viz_ripley_KL(rs, Lminus::Vector{Float64}, title)
@@ -473,7 +532,9 @@ function viz_ripley_KL(rs, Lminus::Vector{Float64}, title)
 end
 
 # ╔═╡ 99e111ef-8064-40f2-82bd-ce9c292e423f
+#=╠═╡
 viz_ripley_KL(rs, ripley_KL_mean, "with lazy")
+  ╠═╡ =#
 
 # ╔═╡ cb40adff-88b3-44cb-83a8-63105263b466
 viz_ripley_KL(rs, ripley_KL(pizza_uniform.pepperonis, rs), "uniform")
@@ -500,10 +561,13 @@ viz_ripley_KL(rs, ripley_KL(pizza_uniform.pepperonis, rs), "uniform")
 # ╠═bd4f3b71-b8b9-4c10-bca9-f98c95fe2a2d
 # ╠═ca6986a2-fe3d-4095-b1a8-f391bb93cdc6
 # ╠═fbbf0014-a056-4b37-8b94-1089390fe728
+# ╟─4e5b7264-f445-4dd3-af55-6f4304ac5306
+# ╠═7b3efafb-78be-4707-a9b8-719ad9ce37e9
 # ╟─f425afb3-a4d4-4cf7-98f6-8e73be0e388d
 # ╠═bb880a76-cdb6-4634-8b74-1daa6b5edc1f
 # ╠═4b6def45-9bfd-41c2-925e-9a6ab69ea3ef
 # ╠═5903739f-e31d-4c50-bde4-93c0f6675970
+# ╠═53050347-14a1-4efc-82de-59d0813adeb8
 # ╟─941f16c2-a778-4904-8d3d-9bb031b5ae9d
 # ╠═4fa54dbb-7f98-4190-af25-4e694b94831e
 # ╠═eb6e3024-2364-462b-b39b-9beba3b43937
@@ -511,12 +575,18 @@ viz_ripley_KL(rs, ripley_KL(pizza_uniform.pepperonis, rs), "uniform")
 # ╠═19b16e44-560b-41db-9f5f-dd1f866ee296
 # ╠═9ff71c87-f48f-4a3a-bb52-1236883b889f
 # ╠═c1ae2e45-e7a2-4988-a31a-3bb5a0eb83a0
-# ╠═b5ea1703-3864-4c5d-96d6-e50ad00d076f
 # ╠═90d2b32a-a50d-4e8c-a0a1-00b4849213f9
 # ╠═a672c27c-8887-4e2e-92dd-cb8077a25f33
 # ╠═66bb6dbb-1ed1-4754-a5e3-7445f77e8dae
 # ╠═d719e69b-d649-4b34-91ff-d50f355df1ce
 # ╠═84369ce0-b19b-4b6b-b876-3872c57a8bf9
+# ╟─826e374d-1f6e-4e72-a9f6-165a8ae0686c
+# ╠═10135e58-4de0-4a4a-96ac-8477e0ff9352
+# ╠═b5ea1703-3864-4c5d-96d6-e50ad00d076f
+# ╠═eac7d700-7495-46d7-9343-8d9c1d962a5b
+# ╠═e8701378-ef4c-4493-b1c3-bd9078f717c1
+# ╠═f6867941-5f28-4030-b9c8-0e29402b2cc6
+# ╠═1fc8d00f-4308-4fa5-93f0-602144d163f3
 # ╟─ba3970f3-8b78-40a1-ac58-09d553568a5b
 # ╠═7e430a28-5060-4cc1-9c33-027312f77de6
 # ╠═10a7b224-2183-4dc9-b705-8e8cc86f11e5
