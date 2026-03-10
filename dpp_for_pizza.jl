@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.21
+# v0.20.23
 
 using Markdown
 using InteractiveUtils
@@ -241,11 +241,34 @@ pizza_uniform = Pizza(
 	sample(candidate_pepperonis, n_pepperoni)
 )
 
+# ╔═╡ 14f53a8b-cb80-44f9-a2f6-a226b44289e1
+sample(candidate_pepperonis, n_pepperoni)
+
 # ╔═╡ 5903739f-e31d-4c50-bde4-93c0f6675970
 viz_pizza(pizza_uniform, title="uniform design")
 
-# ╔═╡ 53050347-14a1-4efc-82de-59d0813adeb8
-pizza_uniform.pepperonis[1]
+# ╔═╡ e123f1b4-8492-471b-8756-5549f2ea0da0
+function circular_law(pizza, pepperoni_radius, n_pepperoni)
+	# circular law
+	rand_matrix = randn(n_pepperoni, n_pepperoni)
+	eig_values = eigvals(rand_matrix)
+
+	# scale into pizza
+	limit_pos = pizza.radius - pizza.crust_radius - pepperoni_radius
+	scal = limit_pos / maximum(abs.(eig_values))
+	eig_scaled = scal .* eig_values
+	
+	pizza_circular = Pizza(
+		pizza_radius, crust_radius, 
+		[Pepperoni(pepperoni_radius, real(i), imag(i)) for i in eig_scaled]
+	)
+end
+
+# ╔═╡ 52b5002d-4165-46eb-813f-26da2401d2e5
+pizza_circular = circular_law(pizza, pepperoni_radius, n_pepperoni)
+
+# ╔═╡ 32ed900d-795d-4f4e-9000-56c5e1e1c619
+viz_pizza(pizza_circular, title="circular design")
 
 # ╔═╡ 941f16c2-a778-4904-8d3d-9bb031b5ae9d
 md"# 🍕 k-DPP"
@@ -425,119 +448,14 @@ begin
 		label="DPP", color=(colors[2], 0.5)
 	)
 	
+	density!(
+		get_pairwise_pepperoni_distances(pizza_circular), 
+		label="circular", color=(colors[3], 0.5)
+	)
+	
 	axislegend()
 	fig
 end
-
-# ╔═╡ ba3970f3-8b78-40a1-ac58-09d553568a5b
-md"# 📈 Ripley KL"
-
-# ╔═╡ 7e430a28-5060-4cc1-9c33-027312f77de6
-function ripley_KL(
-	pepperonis, rs, 
-	pizza_radius=pizza_radius, 
-	crust_radius=crust_radius, 
-	n_pepperoni=n_pepperoni
-)
-	# area of pizza
-	r_pizza = pizza_radius - crust_radius
-    area = π * (pizza_radius - crust_radius)^2
-	# density of pepperoni
-    ρ = n_pepperoni / area
-    # distance from pepperoni to boundary R - ||x_i||
-	p_ref = Pepperoni(pepperoni_radius, 0.0, 0.0)
-    dis_to_boun = [r_pizza - distance(p, p_ref) for p in pepperonis]
-
-    K = Float64[]
-    L = Float64[]
-
-    for r in rs
-        # eligible centers: avoid being too close to the boundary
-        eligible = findall(i -> dis_to_boun[i] ≥ r, 1:n_pepperoni)
-        n_eligible = length(eligible)
-
-        # if too close to the boundary
-        if n_eligible == 0
-            push!(K, NaN)
-            push!(L, NaN)
-            continue
-        end
-
-        # # of neighbors
-        n_neighbors = 0
-        for ii in eligible
-            pᵢ = pepperonis[ii]
-            for j in 1:n_pepperoni
-                if j == ii
-                    continue
-                end
-                pⱼ = pepperonis[j]
-                if distance(pᵢ, pⱼ)≤ r
-                    n_neighbors += 1
-                end
-            end
-        end
-
-        # Khat(r) = n_neighbors / (ρ * n_eligible)
-        Khat = n_neighbors / (ρ * n_eligible)
-        push!(K, Khat)
-        # Lhat(r) = sqrt(Khat/π) if Possion, then K=πr^2
-        Lhat = sqrt(Khat / π)
-        push!(L, Lhat)
-    end
-
-    # return L-r
-	# for small r, smaller (more negative) Lminus indicates a better result,
-	# meaning they are less likely to overlap
-    Lminus = L .- collect(rs)
-    return Lminus
-end
-
-# ╔═╡ 10a7b224-2183-4dc9-b705-8e8cc86f11e5
-rs = 2.0:1.0:15.0
-
-# ╔═╡ aa4ce441-ed21-42b3-9293-f1bfeba92d80
-Lminus = ripley_KL(
-	candidate_pepperonis[ids_dpp], rs
-)
-
-# ╔═╡ 17120eb6-c9d6-4a1a-a212-6502e04cf12f
-# ╠═╡ disabled = true
-#=╠═╡
-begin
-	n_run = 100
-	ripley_KL_list = [[] for n in 1:n_run]
-	for n in 1:n_run
-		ids_dpp_run = with_logger(ConsoleLogger(stdout, Logging.Info)) do
-		mcmc_kdpp(L, n_pepperoni; n_steps=150000)
-	end
-		ripley_KL_list[n] = ripley_KL(candidate_pepperonis[ids_dpp_run], rs)
-	end
-end
-  ╠═╡ =#
-
-# ╔═╡ 84006c38-eb13-4b51-8b3f-c093e8179eea
-#=╠═╡
-ripley_KL_mean = mean(ripley_KL_list, dims=1)[1]
-  ╠═╡ =#
-
-# ╔═╡ bf2c60fc-c527-464b-81ae-75810cf48704
-function viz_ripley_KL(rs, Lminus::Vector{Float64}, title)
-	fig = Figure()
-	ax = Axis(
-		fig[1, 1], xlabel="radius", ylabel="ripley K/L", title=title
-	)
-	lines!(rs, Lminus)
-	fig
-end
-
-# ╔═╡ 99e111ef-8064-40f2-82bd-ce9c292e423f
-#=╠═╡
-viz_ripley_KL(rs, ripley_KL_mean, "with lazy")
-  ╠═╡ =#
-
-# ╔═╡ cb40adff-88b3-44cb-83a8-63105263b466
-viz_ripley_KL(rs, ripley_KL(pizza_uniform.pepperonis, rs), "uniform")
 
 # ╔═╡ Cell order:
 # ╠═84d15bb4-05f1-11f1-97e9-2d44dcee1c9d
@@ -566,8 +484,11 @@ viz_ripley_KL(rs, ripley_KL(pizza_uniform.pepperonis, rs), "uniform")
 # ╟─f425afb3-a4d4-4cf7-98f6-8e73be0e388d
 # ╠═bb880a76-cdb6-4634-8b74-1daa6b5edc1f
 # ╠═4b6def45-9bfd-41c2-925e-9a6ab69ea3ef
+# ╠═14f53a8b-cb80-44f9-a2f6-a226b44289e1
 # ╠═5903739f-e31d-4c50-bde4-93c0f6675970
-# ╠═53050347-14a1-4efc-82de-59d0813adeb8
+# ╠═e123f1b4-8492-471b-8756-5549f2ea0da0
+# ╠═52b5002d-4165-46eb-813f-26da2401d2e5
+# ╠═32ed900d-795d-4f4e-9000-56c5e1e1c619
 # ╟─941f16c2-a778-4904-8d3d-9bb031b5ae9d
 # ╠═4fa54dbb-7f98-4190-af25-4e694b94831e
 # ╠═eb6e3024-2364-462b-b39b-9beba3b43937
@@ -587,12 +508,3 @@ viz_ripley_KL(rs, ripley_KL(pizza_uniform.pepperonis, rs), "uniform")
 # ╠═e8701378-ef4c-4493-b1c3-bd9078f717c1
 # ╠═f6867941-5f28-4030-b9c8-0e29402b2cc6
 # ╠═1fc8d00f-4308-4fa5-93f0-602144d163f3
-# ╟─ba3970f3-8b78-40a1-ac58-09d553568a5b
-# ╠═7e430a28-5060-4cc1-9c33-027312f77de6
-# ╠═10a7b224-2183-4dc9-b705-8e8cc86f11e5
-# ╠═aa4ce441-ed21-42b3-9293-f1bfeba92d80
-# ╠═17120eb6-c9d6-4a1a-a212-6502e04cf12f
-# ╠═84006c38-eb13-4b51-8b3f-c093e8179eea
-# ╠═bf2c60fc-c527-464b-81ae-75810cf48704
-# ╠═99e111ef-8064-40f2-82bd-ce9c292e423f
-# ╠═cb40adff-88b3-44cb-83a8-63105263b466
