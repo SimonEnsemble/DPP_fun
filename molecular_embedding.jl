@@ -39,6 +39,9 @@ raw_data = CSV.read(
 	DataFrame
 )
 
+# ╔═╡ 9044a157-a02f-43e1-a693-6ed5b85e6339
+@assert length(unique(raw_data[:, "molecule"])) == nrow(raw_data)
+
 # ╔═╡ f7a06153-1014-412d-91de-dc430ee1f5e8
 md"
 ## filter out troublesome molecules
@@ -121,37 +124,36 @@ md"## look for indistinguishable molecules
 warning: this takes a long time.
 "
 
-# ╔═╡ 9c6e9fa9-1b51-4df7-9040-50e2493e0f1a
-md"look for duplicates? $(@bind look_for_duplicates PlutoUI.CheckBox())"
+# ╔═╡ 07bd1f30-c4b9-47cd-903f-4e943a7b97ce
+idps_filename = "indistinguishable_pairs.jld2"
 
 # ╔═╡ ec7c6096-17bd-4960-9864-c34d0461114b
-if look_for_duplicates
-	# loop over pairs of molecules
-	ids_duplicates = []
-	for i = 1:length(mgs)
-		for j = i+1:length(mgs)
-			if isapprox(K[:, i], K[:, j])
-				push!(ids_duplicates, (i, j))
-			end
-		end
-	end
-	ids_duplicates
+if ! isfile(idps_filename)
+	idps = indistinguishable_pairs(K)
+	jldsave(idps_filename; idps)
+else
+	println("loading from $idps_filename")
+	idps = load(idps_filename)["idps"]
+	idps
 end
 
-# ╔═╡ c7c99cf3-1e2d-485b-b4de-4ec287514f65
-viz(mgs[1]) # viz duplicates here if pertinent
-
 # ╔═╡ 2d129919-52e2-47a1-bc76-1b8ed486e452
-md"indistinguishable pair browser. $(@bind duplicate_id PlutoUI.Slider(1:length(ids_indistinguisable)))"
+md"indistinguishable pair browser. $(@bind duplicate_id PlutoUI.Slider(1:length(idps)))"
+
+# ╔═╡ 398f4803-8944-4a83-aece-64312ab8b925
+mgs[idps[duplicate_id][1]].smiles
+
+# ╔═╡ 7e0299eb-a494-4730-b143-ad62e2ec43ba
+mgs[idps[duplicate_id][2]].smiles
 
 # ╔═╡ 5f4aa5c8-39d3-4a57-8e06-ec15c6a914ba
-if length(ids_indistinguisable) > 0
-	viz(mgs[ids_indistinguisable[duplicate_id][1]])
+if length(ids_duplicates) > 0
+	viz(mgs[idps[duplicate_id][1]])
 end
 
 # ╔═╡ 7be50944-19f7-4cd7-b303-fdbee3f35d39
-if length(ids_indistinguisable) > 0
-	viz(mgs[ids_indistinguisable[duplicate_id][2]])
+if length(ids_duplicates) > 0
+	viz(mgs[idps[duplicate_id][2]])
 end
 
 # ╔═╡ a157eb93-7027-4dee-9f3b-07e2178253b9
@@ -209,6 +211,7 @@ data[ids_filter, my_smell]
 # ╠═79adcae5-192f-470b-898d-7688e8041054
 # ╟─d7b41ed5-53af-4c48-bc5c-3c8e1554a2ee
 # ╠═713ba284-16d7-45b6-ab97-e200cb101863
+# ╠═9044a157-a02f-43e1-a693-6ed5b85e6339
 # ╟─f7a06153-1014-412d-91de-dc430ee1f5e8
 # ╠═76144644-aac5-4d0e-9535-20344b360239
 # ╠═3c85b30a-b1d7-4d84-a206-b9b47f894125
@@ -221,10 +224,11 @@ data[ids_filter, my_smell]
 # ╟─c3e93eec-73e0-48ac-b72b-2a1b9670bddd
 # ╠═47939e72-61e0-4377-af30-fa387d815e72
 # ╟─6831a957-5af9-4afa-9934-7703cb22ca98
-# ╟─9c6e9fa9-1b51-4df7-9040-50e2493e0f1a
+# ╠═07bd1f30-c4b9-47cd-903f-4e943a7b97ce
 # ╠═ec7c6096-17bd-4960-9864-c34d0461114b
-# ╠═c7c99cf3-1e2d-485b-b4de-4ec287514f65
 # ╟─2d129919-52e2-47a1-bc76-1b8ed486e452
+# ╠═398f4803-8944-4a83-aece-64312ab8b925
+# ╠═7e0299eb-a494-4730-b143-ad62e2ec43ba
 # ╠═5f4aa5c8-39d3-4a57-8e06-ec15c6a914ba
 # ╠═7be50944-19f7-4cd7-b303-fdbee3f35d39
 # ╠═a157eb93-7027-4dee-9f3b-07e2178253b9
