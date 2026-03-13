@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.24
+# v0.20.23
 
 using Markdown
 using InteractiveUtils
@@ -21,7 +21,9 @@ begin
 	import Pkg; Pkg.activate()
 	using ShortestPathMolecularGraphKernels
 	using CairoMakie, Printf, LinearAlgebra, DataFrames, CSV, 
-		PlutoUI, JLD2, Test, Graphs, MakieThemes
+		PlutoUI, JLD2, Test, Graphs, MakieThemes, Statistics,
+		LinearAlgebra
+
 	set_theme!(ggthemr(:pale))
 end
 
@@ -118,6 +120,59 @@ md"use as final Gram matrix the composite kernel, in terms of exact vs. src-dst 
 # ╔═╡ 47939e72-61e0-4377-af30-fa387d815e72
 K = Ks[true] .+ Ks[false]
 
+# ╔═╡ e2fe2ee6-d09a-4ed3-9dab-c0fbdfe355e7
+K1 = Ks[true] .* Ks[false]
+
+# ╔═╡ a11e1eb3-9a83-4ae5-a6ad-200c21a6ce5e
+function center_gram(K::AbstractMatrix)
+    @assert size(K, 2) == size(K, 1) "Gram matrix must be square"
+
+    row_mean = mean(K, dims=2)   
+    col_mean = mean(K, dims=1)   
+    total_mean = mean(K)         
+
+    return K .- row_mean .- col_mean .+ total_mean
+end
+
+# ╔═╡ 4af28c47-df8a-4a4b-9e91-5c9c0da5a775
+K_center = center_gram(K)
+
+# ╔═╡ cf524ed3-a21f-4864-8722-13b97f40d4a2
+@assert maximum(abs.(mean(K_center, dims=1))) < 1e-10
+
+# ╔═╡ 71e26f93-5005-4bc1-bcb1-796f32a1f15c
+@assert maximum(abs.(mean(K_center, dims=2))) < 1e-10
+
+# ╔═╡ 81081c9d-47ba-488a-ad48-cab848938f74
+function eig_gram(Kc::AbstractMatrix)
+    E = eigen(Symmetric(Kc)) 
+    return E.values, E.vectors
+end
+
+# ╔═╡ a66605f1-128c-4f04-913d-0da5b7ca8806
+vals, vecs = eig_gram(K_center)
+
+# ╔═╡ 7830cfd8-9148-4deb-9101-25fa08c31e9a
+function k_PCA(vals, vecs; n_components=2)
+    perm = sortperm(vals, rev=true)
+	vals_m = vals[perm][1:n_components]
+    vecs_m = vecs[:, perm][:, 1:n_components]
+
+	n_PCA = vecs_m .* sqrt.(vals_m)'
+    return n_PCA[:, 1], n_PCA[:, 2]
+end
+
+# ╔═╡ 52991237-d58d-4fe2-a6a2-73d74db47e75
+pca_1, pca_2 = k_PCA(vals, vecs)
+
+# ╔═╡ 68cece24-e775-466f-87f1-a4c51465df53
+begin
+	pca_data = copy(data)
+	pca_data[!, :pca_1] = pca_1
+	pca_data[!, :pca_2] = pca_2
+	CSV.write("pca_data.csv", pca_data)
+end
+
 # ╔═╡ 6831a957-5af9-4afa-9934-7703cb22ca98
 md"## look for indistinguishable molecules
 
@@ -147,12 +202,12 @@ mgs[idps[duplicate_id][1]].smiles
 mgs[idps[duplicate_id][2]].smiles
 
 # ╔═╡ 5f4aa5c8-39d3-4a57-8e06-ec15c6a914ba
-if length(ids_duplicates) > 0
+if length(duplicate_id) > 0
 	viz(mgs[idps[duplicate_id][1]])
 end
 
 # ╔═╡ 7be50944-19f7-4cd7-b303-fdbee3f35d39
-if length(ids_duplicates) > 0
+if length(duplicate_id) > 0
 	viz(mgs[idps[duplicate_id][2]])
 end
 
@@ -223,6 +278,16 @@ data[ids_filter, my_smell]
 # ╠═30ff7345-d7b0-4741-bca4-6fe2a882df96
 # ╟─c3e93eec-73e0-48ac-b72b-2a1b9670bddd
 # ╠═47939e72-61e0-4377-af30-fa387d815e72
+# ╠═e2fe2ee6-d09a-4ed3-9dab-c0fbdfe355e7
+# ╠═a11e1eb3-9a83-4ae5-a6ad-200c21a6ce5e
+# ╠═4af28c47-df8a-4a4b-9e91-5c9c0da5a775
+# ╠═cf524ed3-a21f-4864-8722-13b97f40d4a2
+# ╠═71e26f93-5005-4bc1-bcb1-796f32a1f15c
+# ╠═81081c9d-47ba-488a-ad48-cab848938f74
+# ╠═a66605f1-128c-4f04-913d-0da5b7ca8806
+# ╠═7830cfd8-9148-4deb-9101-25fa08c31e9a
+# ╠═52991237-d58d-4fe2-a6a2-73d74db47e75
+# ╠═68cece24-e775-466f-87f1-a4c51465df53
 # ╟─6831a957-5af9-4afa-9934-7703cb22ca98
 # ╠═07bd1f30-c4b9-47cd-903f-4e943a7b97ce
 # ╠═ec7c6096-17bd-4960-9864-c34d0461114b
