@@ -117,11 +117,26 @@ end
 # ╔═╡ c3e93eec-73e0-48ac-b72b-2a1b9670bddd
 md"use as final Gram matrix the composite kernel, in terms of exact vs. src-dst pattern matching."
 
-# ╔═╡ 47939e72-61e0-4377-af30-fa387d815e72
-K = Ks[true] .+ Ks[false]
+# ╔═╡ f61ef77e-17ba-4dd6-86be-852db526bf4c
+function normalize_kernel(K)
+    d = sqrt.(diag(K))  
+    K_norm = K ./ (d * d')  
+    return K_norm
+end
+
+# ╔═╡ 64531922-0912-4b59-af4c-5273db60506b
+begin
+	K1 = normalize_kernel(Ks[true])
+	K2 = normalize_kernel(Ks[false])
+	
+	K = K1 .+ K2
+end
+
+# ╔═╡ 7381ab55-333e-4a10-885c-9448b6d9c854
+CSV.write("Gram_matrix.csv", DataFrame(K, :auto))
 
 # ╔═╡ e2fe2ee6-d09a-4ed3-9dab-c0fbdfe355e7
-K1 = Ks[true] .* Ks[false]
+K_times = Ks[true] .* Ks[false]
 
 # ╔═╡ a11e1eb3-9a83-4ae5-a6ad-200c21a6ce5e
 function center_gram(K::AbstractMatrix)
@@ -277,7 +292,9 @@ data[ids_filter, my_smell]
 # ╠═f65a43dc-5710-4cc5-8cf2-8da1e24024e8
 # ╠═30ff7345-d7b0-4741-bca4-6fe2a882df96
 # ╟─c3e93eec-73e0-48ac-b72b-2a1b9670bddd
-# ╠═47939e72-61e0-4377-af30-fa387d815e72
+# ╠═f61ef77e-17ba-4dd6-86be-852db526bf4c
+# ╠═64531922-0912-4b59-af4c-5273db60506b
+# ╠═7381ab55-333e-4a10-885c-9448b6d9c854
 # ╠═e2fe2ee6-d09a-4ed3-9dab-c0fbdfe355e7
 # ╠═a11e1eb3-9a83-4ae5-a6ad-200c21a6ce5e
 # ╠═4af28c47-df8a-4a4b-9e91-5c9c0da5a775

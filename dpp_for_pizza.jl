@@ -7,7 +7,7 @@ using InteractiveUtils
 # ╔═╡ 84d15bb4-05f1-11f1-97e9-2d44dcee1c9d
 begin
 	import Pkg; Pkg.activate()
-	using CairoMakie, LinearAlgebra, MakieThemes, StatsBase, Colors, Logging
+	using CairoMakie, LinearAlgebra, MakieThemes, StatsBase, Colors, Logging, CSV, DataFrames
 	# modifying the plot scheme
 	# see here for other themes
 	#  https://makieorg.github.io/MakieThemes.jl/dev/themes/ggthemr/
@@ -241,9 +241,6 @@ pizza_uniform = Pizza(
 	sample(candidate_pepperonis, n_pepperoni)
 )
 
-# ╔═╡ 14f53a8b-cb80-44f9-a2f6-a226b44289e1
-sample(candidate_pepperonis, n_pepperoni)
-
 # ╔═╡ 5903739f-e31d-4c50-bde4-93c0f6675970
 viz_pizza(pizza_uniform, title="uniform design")
 
@@ -441,7 +438,7 @@ begin
 
 	density!(
 		get_pairwise_pepperoni_distances(pizza_uniform), 
-		label="uniform", color=(colors[1], 0.5)
+		label="uniform", color=(colors[1], 0.5), boundary=(0.0, 100)
 	)
 	density!(
 		get_pairwise_pepperoni_distances(pizza_dpp), 
@@ -455,6 +452,47 @@ begin
 	
 	axislegend()
 	fig
+end
+
+# ╔═╡ 156bb81a-6ccb-4222-8ee8-eea5c4804fd1
+md"## using DPP sample molecules"
+
+# ╔═╡ 96d7b6dd-5796-45e4-a1fd-c47bf01cc26e
+function psd(K; eps=1e-10)
+    Ksym = Symmetric((K + K') / 2)
+    F = eigen(Ksym)
+    vals = max.(F.values, eps)
+    return Matrix(Symmetric(F.vectors * Diagonal(vals) * F.vectors'))
+end
+
+# ╔═╡ 82a7e6af-d8d1-4007-924d-cd480ba033f7
+begin
+	molecule_L = Matrix(CSV.read("Gram_matrix.csv", DataFrame))
+	molecule_L = psd(molecule_L)
+end
+
+# ╔═╡ bf6f47f8-b9a8-4523-9a4f-f4d6f0f37ac2
+n_molecules = 56
+
+# ╔═╡ 60931df5-47cf-49f7-aab6-82c02d25487e
+ids_molecule_dpp = with_logger(ConsoleLogger(stdout, Logging.Info)) do
+	mcmc_kdpp(molecule_L, n_molecules; n_steps=15000)
+end
+
+# ╔═╡ 1a541ebc-d129-4461-896d-7c7b49a3a29a
+open("ids_molecule_dpp.txt", "w") do io
+    println(io, join(ids_molecule_dpp, " "))
+end
+
+# ╔═╡ bb02beaa-58d1-4a84-a496-acf2733612e3
+md" ### uniform sample molecules"
+
+# ╔═╡ 1605a807-12d2-4fd2-a45a-6aa8f5bd2f6a
+ids_molecule_uniform = sample(collect(1:molecule_L.size[1]), n_molecules)
+
+# ╔═╡ b3410109-aa61-4b20-a484-4443ca20fd3b
+open("ids_molecule_uniform.txt", "w") do io
+    println(io, join(ids_molecule_uniform, " "))
 end
 
 # ╔═╡ Cell order:
@@ -484,7 +522,6 @@ end
 # ╟─f425afb3-a4d4-4cf7-98f6-8e73be0e388d
 # ╠═bb880a76-cdb6-4634-8b74-1daa6b5edc1f
 # ╠═4b6def45-9bfd-41c2-925e-9a6ab69ea3ef
-# ╠═14f53a8b-cb80-44f9-a2f6-a226b44289e1
 # ╠═5903739f-e31d-4c50-bde4-93c0f6675970
 # ╠═e123f1b4-8492-471b-8756-5549f2ea0da0
 # ╠═52b5002d-4165-46eb-813f-26da2401d2e5
@@ -501,10 +538,19 @@ end
 # ╠═66bb6dbb-1ed1-4754-a5e3-7445f77e8dae
 # ╠═d719e69b-d649-4b34-91ff-d50f355df1ce
 # ╠═84369ce0-b19b-4b6b-b876-3872c57a8bf9
-# ╟─826e374d-1f6e-4e72-a9f6-165a8ae0686c
+# ╠═826e374d-1f6e-4e72-a9f6-165a8ae0686c
 # ╠═10135e58-4de0-4a4a-96ac-8477e0ff9352
 # ╠═b5ea1703-3864-4c5d-96d6-e50ad00d076f
 # ╠═eac7d700-7495-46d7-9343-8d9c1d962a5b
 # ╠═e8701378-ef4c-4493-b1c3-bd9078f717c1
 # ╠═f6867941-5f28-4030-b9c8-0e29402b2cc6
 # ╠═1fc8d00f-4308-4fa5-93f0-602144d163f3
+# ╟─156bb81a-6ccb-4222-8ee8-eea5c4804fd1
+# ╠═96d7b6dd-5796-45e4-a1fd-c47bf01cc26e
+# ╠═82a7e6af-d8d1-4007-924d-cd480ba033f7
+# ╠═bf6f47f8-b9a8-4523-9a4f-f4d6f0f37ac2
+# ╠═60931df5-47cf-49f7-aab6-82c02d25487e
+# ╠═1a541ebc-d129-4461-896d-7c7b49a3a29a
+# ╟─bb02beaa-58d1-4a84-a496-acf2733612e3
+# ╠═1605a807-12d2-4fd2-a45a-6aa8f5bd2f6a
+# ╠═b3410109-aa61-4b20-a484-4443ca20fd3b
