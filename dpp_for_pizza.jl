@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.23
+# v0.20.24
 
 using Markdown
 using InteractiveUtils
@@ -7,7 +7,8 @@ using InteractiveUtils
 # ╔═╡ 84d15bb4-05f1-11f1-97e9-2d44dcee1c9d
 begin
 	import Pkg; Pkg.activate()
-	using CairoMakie, LinearAlgebra, MakieThemes, StatsBase, Colors, Logging, CSV, DataFrames
+	using CairoMakie, LinearAlgebra, MakieThemes, StatsBase, Colors, Logging, CSV, DataFrames, Base.Threads
+	using MCMCkDPP
 	# modifying the plot scheme
 	# see here for other themes
 	#  https://makieorg.github.io/MakieThemes.jl/dev/themes/ggthemr/
@@ -208,26 +209,6 @@ viz_pizza(
 	title="candidate pepperoni placements"
 )
 
-# ╔═╡ 4e5b7264-f445-4dd3-af55-6f4304ac5306
-md"## filter candidates by overlaps"
-
-# ╔═╡ 7b3efafb-78be-4707-a9b8-719ad9ce37e9
-# function filter_non_overlapping_candidates(
-# 	# current pepperonis
-# 	pepperonis::Vector{Pepperoni},
-# 	# candidate pepperonis
-# 	candidate_pepperonis::Vector{Pepperoni}
-# )
-# 	ids_valid = Int[]
-# 	for i = 1:length(candidate_pepperonis)
-# 		for p in pepperonis
-# 			if overlap(p, candidate_pepperonis[i])
-# 			end
-# 		end
-# 	end
-# 	return ids_valid
-# end
-
 # ╔═╡ f425afb3-a4d4-4cf7-98f6-8e73be0e388d
 md"# 🍕 uniform sampling"
 
@@ -243,29 +224,6 @@ pizza_uniform = Pizza(
 
 # ╔═╡ 5903739f-e31d-4c50-bde4-93c0f6675970
 viz_pizza(pizza_uniform, title="uniform design")
-
-# ╔═╡ e123f1b4-8492-471b-8756-5549f2ea0da0
-function circular_law(pizza, pepperoni_radius, n_pepperoni)
-	# circular law
-	rand_matrix = randn(n_pepperoni, n_pepperoni)
-	eig_values = eigvals(rand_matrix)
-
-	# scale into pizza
-	limit_pos = pizza.radius - pizza.crust_radius - pepperoni_radius
-	scal = limit_pos / maximum(abs.(eig_values))
-	eig_scaled = scal .* eig_values
-	
-	pizza_circular = Pizza(
-		pizza_radius, crust_radius, 
-		[Pepperoni(pepperoni_radius, real(i), imag(i)) for i in eig_scaled]
-	)
-end
-
-# ╔═╡ 52b5002d-4165-46eb-813f-26da2401d2e5
-pizza_circular = circular_law(pizza, pepperoni_radius, n_pepperoni)
-
-# ╔═╡ 32ed900d-795d-4f4e-9000-56c5e1e1c619
-viz_pizza(pizza_circular, title="circular design")
 
 # ╔═╡ 941f16c2-a778-4904-8d3d-9bb031b5ae9d
 md"# 🍕 k-DPP"
@@ -308,67 +266,6 @@ function sample_new_item(
 	return id
 end
 
-# ╔═╡ 90d2b32a-a50d-4e8c-a0a1-00b4849213f9
-function mcmc_kdpp(
-	# item-item similarity matrix (psd)
-	L::Matrix{Float64}, 
-	# number of items to select
-	k::Int;
-	# MCMC steps
-	n_steps::Int=10000,
-	# allow overlap?
-	allow_overlap::Bool=true
-)
-	# infer the number of items
-	n = size(L)[1]
-
-	# initial sample
-	ids = sample(1:n, k, replace=false)
-	
-	# current det(Lₓ)
-	current_det = det(L[ids, ids])
-	
-	# MCMC
-	for s = 1:n_steps
-		@debug "step $s"
-		@debug "\tids = $ids"
-		@debug "\tcurrent det L = $current_det"
-		
-		###
-		# propose an exchange move
-		###
-		# index of current item we propose to replace
-		id_replace_item = sample(1:k)
-
-		# new item outside of ids to replace it with 
-		id_new_item = sample_new_item(ids, n)
-		
-		# proposed new current set 
-		new_ids = copy(ids) 
-		new_ids[id_replace_item] = id_new_item
-
-		# new det
-		new_det = det(L[new_ids, new_ids])
-		@debug "\tpropose replacement of:\n\t\tcurrent item ID $id_replace_item\n\t\ti.e. item $(ids[id_replace_item])\n\twith item $id_new_item\n\t\tnew det = $new_det"
-
-		###
-		# accept or reject
-		###
-		if rand() < 0.5 * min(1, new_det / current_det)
-			@debug "\tACCEPT!"
-			ids = new_ids
-			current_det = new_det
-		else
-			@debug "\tREJECT!"
-		end
-
-		if current_det < 0.0
-			error("negative det(Lₓ; L not PSD)")
-		end
-	end
-	return ids
-end
-
 # ╔═╡ a672c27c-8887-4e2e-92dd-cb8077a25f33
 with_logger(ConsoleLogger(stdout, Logging.Debug)) do
 	ids = rand(1:size(L)[1], 10)
@@ -376,20 +273,28 @@ with_logger(ConsoleLogger(stdout, Logging.Debug)) do
 	mcmc_kdpp(L[ids, ids], 4; n_steps=20)
 end
 
-# ╔═╡ 66bb6dbb-1ed1-4754-a5e3-7445f77e8dae
-ids_dpp = with_logger(ConsoleLogger(stdout, Logging.Info)) do
-	mcmc_kdpp(L, n_pepperoni; n_steps=150000)
-end
+# ╔═╡ 3dbfdbf5-f3d7-4c11-b02b-f02f981f3901
+ids_mcmc_dpp = mcmc_kdpp(L, n_pepperoni)
 
-# ╔═╡ d719e69b-d649-4b34-91ff-d50f355df1ce
+# ╔═╡ 764dc86c-86ab-40fd-b0fe-f5ea1a43ebd1
 pizza_dpp = Pizza(
 	pizza_radius,
 	crust_radius,
-	candidate_pepperonis[ids_dpp]
+	candidate_pepperonis[ids_mcmc_dpp]
 )
 
-# ╔═╡ 84369ce0-b19b-4b6b-b876-3872c57a8bf9
+# ╔═╡ 93669cfa-7cb4-4296-a676-94e158378d93
 viz_pizza(pizza_dpp)
+
+# ╔═╡ 59cf0e20-59a5-4d85-ac5c-4957097da90a
+ids_greedy_dpp = greedy_kdpp(L, n_pepperoni)
+
+# ╔═╡ 58932740-27a6-4eb4-95e9-4b5c63402c9f
+viz_pizza(Pizza(
+	pizza_radius,
+	crust_radius,
+	candidate_pepperonis[ids_greedy_dpp]
+))
 
 # ╔═╡ 826e374d-1f6e-4e72-a9f6-165a8ae0686c
 md"## statistical analysis of DPP vs uniform"
@@ -445,17 +350,28 @@ begin
 		label="DPP", color=(colors[2], 0.5)
 	)
 	
-	density!(
-		get_pairwise_pepperoni_distances(pizza_circular), 
-		label="circular", color=(colors[3], 0.5)
-	)
-	
 	axislegend()
 	fig
 end
 
 # ╔═╡ 156bb81a-6ccb-4222-8ee8-eea5c4804fd1
 md"## using DPP sample molecules"
+
+# ╔═╡ 473e3deb-9c5b-48f2-9cc8-a0f73941a48b
+n_run = 100
+
+# ╔═╡ 685219e6-e162-4121-87f0-31ec818bb170
+Threads.nthreads()
+
+# ╔═╡ e17f6889-b748-4b92-8d11-ea39c2c72d26
+function n_run_compute(method, n_run, molecule_L, n_molecules)
+	
+	n_run_ids = [[] for n in 1:n_run]
+	@threads for n in 1:n_run
+		n_run_ids[n] = method(molecule_L, n_molecules)
+	end
+	return DataFrame(n_run_ids, :auto)
+end
 
 # ╔═╡ 96d7b6dd-5796-45e4-a1fd-c47bf01cc26e
 function psd(K; eps=1e-10)
@@ -468,32 +384,56 @@ end
 # ╔═╡ 82a7e6af-d8d1-4007-924d-cd480ba033f7
 begin
 	molecule_L = Matrix(CSV.read("Gram_matrix.csv", DataFrame))
-	molecule_L = psd(molecule_L)
+	# molecule_L = psd(molecule_L)
 end
+
+# ╔═╡ 9bd786e6-3ca9-4d14-aa4c-3b055da6bf8b
+s_molecule_L = Matrix(CSV.read("s_Gram_matrix.csv", DataFrame))
 
 # ╔═╡ bf6f47f8-b9a8-4523-9a4f-f4d6f0f37ac2
-n_molecules = 56
+n_molecules = 100
 
-# ╔═╡ 60931df5-47cf-49f7-aab6-82c02d25487e
-ids_molecule_dpp = with_logger(ConsoleLogger(stdout, Logging.Info)) do
-	mcmc_kdpp(molecule_L, n_molecules; n_steps=15000)
-end
+# ╔═╡ 6d5d1589-e8b3-4695-ac86-7ea62018904a
+# ╠═╡ disabled = true
+#=╠═╡
+ids_molecule_mcmc_dpp = n_run_compute(mcmc_kdpp, n_run, molecule_L, n_molecules)
+  ╠═╡ =#
 
-# ╔═╡ 1a541ebc-d129-4461-896d-7c7b49a3a29a
-open("ids_molecule_dpp.txt", "w") do io
-    println(io, join(ids_molecule_dpp, " "))
-end
+# ╔═╡ 03475552-5b4f-48f4-86e2-0ab218ecc747
+s_ids_molecule_mcmc_dpp = n_run_compute(mcmc_kdpp, n_run, s_molecule_L, n_molecules)
+
+# ╔═╡ f436d6a5-f299-4a44-ab3e-05c55c7a77a2
+CSV.write("ss_ids_molecule_mcmc_dpp_$(n_molecules).csv", s_ids_molecule_mcmc_dpp)
+
+# ╔═╡ 6c278377-8aa2-410f-a6a8-1d349102d58c
+#=╠═╡
+CSV.write("ids_molecule_mcmc_dpp_$(n_molecules).csv", ids_molecule_mcmc_dpp)
+  ╠═╡ =#
 
 # ╔═╡ bb02beaa-58d1-4a84-a496-acf2733612e3
 md" ### uniform sample molecules"
 
+# ╔═╡ ef8375c5-f353-4cf4-a3f4-ab30c33fba98
+function uniform(molecule_L, n_molecules)
+	return sample(collect(1:molecule_L.size[1]), n_molecules)
+end
+
 # ╔═╡ 1605a807-12d2-4fd2-a45a-6aa8f5bd2f6a
-ids_molecule_uniform = sample(collect(1:molecule_L.size[1]), n_molecules)
+# ╠═╡ disabled = true
+#=╠═╡
+ids_molecule_uniform = n_run_compute(uniform, n_run, molecule_L, n_molecules)
+  ╠═╡ =#
 
 # ╔═╡ b3410109-aa61-4b20-a484-4443ca20fd3b
-open("ids_molecule_uniform.txt", "w") do io
-    println(io, join(ids_molecule_uniform, " "))
-end
+#=╠═╡
+CSV.write("ids_molecule_uniform_$(n_molecules).csv", ids_molecule_uniform)
+  ╠═╡ =#
+
+# ╔═╡ cbc0b68c-487f-4a7e-beea-ce9b6241d147
+s_ids_molecule_uniform = n_run_compute(uniform, n_run, s_molecule_L, n_molecules)
+
+# ╔═╡ 0f8811c6-abf1-4251-a9aa-0fbb96bc34bb
+CSV.write("ss_ids_molecule_uniform_$(n_molecules).csv", s_ids_molecule_uniform)
 
 # ╔═╡ Cell order:
 # ╠═84d15bb4-05f1-11f1-97e9-2d44dcee1c9d
@@ -517,15 +457,10 @@ end
 # ╠═bd4f3b71-b8b9-4c10-bca9-f98c95fe2a2d
 # ╠═ca6986a2-fe3d-4095-b1a8-f391bb93cdc6
 # ╠═fbbf0014-a056-4b37-8b94-1089390fe728
-# ╟─4e5b7264-f445-4dd3-af55-6f4304ac5306
-# ╠═7b3efafb-78be-4707-a9b8-719ad9ce37e9
 # ╟─f425afb3-a4d4-4cf7-98f6-8e73be0e388d
 # ╠═bb880a76-cdb6-4634-8b74-1daa6b5edc1f
 # ╠═4b6def45-9bfd-41c2-925e-9a6ab69ea3ef
 # ╠═5903739f-e31d-4c50-bde4-93c0f6675970
-# ╠═e123f1b4-8492-471b-8756-5549f2ea0da0
-# ╠═52b5002d-4165-46eb-813f-26da2401d2e5
-# ╠═32ed900d-795d-4f4e-9000-56c5e1e1c619
 # ╟─941f16c2-a778-4904-8d3d-9bb031b5ae9d
 # ╠═4fa54dbb-7f98-4190-af25-4e694b94831e
 # ╠═eb6e3024-2364-462b-b39b-9beba3b43937
@@ -533,11 +468,12 @@ end
 # ╠═19b16e44-560b-41db-9f5f-dd1f866ee296
 # ╠═9ff71c87-f48f-4a3a-bb52-1236883b889f
 # ╠═c1ae2e45-e7a2-4988-a31a-3bb5a0eb83a0
-# ╠═90d2b32a-a50d-4e8c-a0a1-00b4849213f9
 # ╠═a672c27c-8887-4e2e-92dd-cb8077a25f33
-# ╠═66bb6dbb-1ed1-4754-a5e3-7445f77e8dae
-# ╠═d719e69b-d649-4b34-91ff-d50f355df1ce
-# ╠═84369ce0-b19b-4b6b-b876-3872c57a8bf9
+# ╠═3dbfdbf5-f3d7-4c11-b02b-f02f981f3901
+# ╠═764dc86c-86ab-40fd-b0fe-f5ea1a43ebd1
+# ╠═93669cfa-7cb4-4296-a676-94e158378d93
+# ╠═59cf0e20-59a5-4d85-ac5c-4957097da90a
+# ╠═58932740-27a6-4eb4-95e9-4b5c63402c9f
 # ╠═826e374d-1f6e-4e72-a9f6-165a8ae0686c
 # ╠═10135e58-4de0-4a4a-96ac-8477e0ff9352
 # ╠═b5ea1703-3864-4c5d-96d6-e50ad00d076f
@@ -546,11 +482,20 @@ end
 # ╠═f6867941-5f28-4030-b9c8-0e29402b2cc6
 # ╠═1fc8d00f-4308-4fa5-93f0-602144d163f3
 # ╟─156bb81a-6ccb-4222-8ee8-eea5c4804fd1
+# ╠═473e3deb-9c5b-48f2-9cc8-a0f73941a48b
+# ╠═685219e6-e162-4121-87f0-31ec818bb170
+# ╠═e17f6889-b748-4b92-8d11-ea39c2c72d26
 # ╠═96d7b6dd-5796-45e4-a1fd-c47bf01cc26e
 # ╠═82a7e6af-d8d1-4007-924d-cd480ba033f7
+# ╠═9bd786e6-3ca9-4d14-aa4c-3b055da6bf8b
 # ╠═bf6f47f8-b9a8-4523-9a4f-f4d6f0f37ac2
-# ╠═60931df5-47cf-49f7-aab6-82c02d25487e
-# ╠═1a541ebc-d129-4461-896d-7c7b49a3a29a
+# ╠═6d5d1589-e8b3-4695-ac86-7ea62018904a
+# ╠═03475552-5b4f-48f4-86e2-0ab218ecc747
+# ╠═f436d6a5-f299-4a44-ab3e-05c55c7a77a2
+# ╠═6c278377-8aa2-410f-a6a8-1d349102d58c
 # ╟─bb02beaa-58d1-4a84-a496-acf2733612e3
+# ╠═ef8375c5-f353-4cf4-a3f4-ab30c33fba98
 # ╠═1605a807-12d2-4fd2-a45a-6aa8f5bd2f6a
 # ╠═b3410109-aa61-4b20-a484-4443ca20fd3b
+# ╠═cbc0b68c-487f-4a7e-beea-ce9b6241d147
+# ╠═0f8811c6-abf1-4251-a9aa-0fbb96bc34bb
