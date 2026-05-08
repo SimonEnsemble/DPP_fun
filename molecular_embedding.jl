@@ -4,18 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    #! format: off
-    return quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-    #! format: on
-end
-
 # ╔═╡ cecf3058-bb8f-11f0-97f3-bda46249b7c9
 begin
 	import Pkg; Pkg.activate()
@@ -69,30 +57,39 @@ function get_troublesome_molecules(raw_data, name_mol)
 end
 
 # ╔═╡ e74a68b2-cda6-466c-9ccf-78d690c335fd
+# ╠═╡ disabled = true
+#=╠═╡
  troublesome_molecules = get_troublesome_molecules(raw_data, "molecule")
+  ╠═╡ =#
 
 # ╔═╡ 3c85b30a-b1d7-4d84-a206-b9b47f894125
+#=╠═╡
 data = filter(row -> ! (row["molecule"] in troublesome_molecules), raw_data)
+  ╠═╡ =#
 
 # ╔═╡ 017b6abe-fadd-4697-96ba-7454e375f668
 md"## 🧪🚗 construct the molecular graphs and find shortest paths
 "
 
 # ╔═╡ 31e64f9f-6048-467d-8906-64298cae8db9
+#=╠═╡
 @time begin
 	mgs = MolGraph.(data[:, "molecule"])
 	for mg in mgs
 		find_shortest_paths!(mg)
 	end
 end
+  ╠═╡ =#
 
 # ╔═╡ d100bcf3-4495-4599-9734-6d15c0b90d64
+#=╠═╡
 hist(
 	[length(mg.spaths) for mg in mgs], bins=500,
 	axis=(; xlabel="# shortest paths", ylabel="# molecules", 
 		  limits=(0, 500, 0, nothing)
 	)
 )
+  ╠═╡ =#
 
 # ╔═╡ 348ba4c3-ae1f-4737-bd2d-70306f427ebd
 md"## 🐸 compute Gram matrix"
@@ -120,25 +117,37 @@ function compute_kernel(mgs, gram_matrix_filename)
 end
 
 # ╔═╡ 5a2535c2-e6ab-4871-bb7f-3e8666499241
+#=╠═╡
 Ks = compute_kernel(mgs, gram_matrix_filename)
+  ╠═╡ =#
 
 # ╔═╡ c3e93eec-73e0-48ac-b72b-2a1b9670bddd
 md"use as final Gram matrix the composite kernel, in terms of exact vs. src-dst pattern matching."
 
 # ╔═╡ 64531922-0912-4b59-af4c-5273db60506b
-K = normalize_Gram_matrix(Ks[true] .+ Ks[false])
+#=╠═╡
+K = normalize_Gram_matrix(Ks[true]) .+ normalize_Gram_matrix(Ks[false])
+  ╠═╡ =#
 
 # ╔═╡ 7381ab55-333e-4a10-885c-9448b6d9c854
+#=╠═╡
 CSV.write("Gram_matrix.csv", DataFrame(K, :auto))
+  ╠═╡ =#
 
 # ╔═╡ 4af28c47-df8a-4a4b-9e91-5c9c0da5a775
+#=╠═╡
 K_center = center_Gram_matrix(K)
+  ╠═╡ =#
 
 # ╔═╡ cf524ed3-a21f-4864-8722-13b97f40d4a2
+#=╠═╡
 @assert maximum(abs.(mean(K_center, dims=1))) < 1e-10
+  ╠═╡ =#
 
 # ╔═╡ 71e26f93-5005-4bc1-bcb1-796f32a1f15c
+#=╠═╡
 @assert maximum(abs.(mean(K_center, dims=2))) < 1e-10
+  ╠═╡ =#
 
 # ╔═╡ 81081c9d-47ba-488a-ad48-cab848938f74
 function eig_gram(Kc::AbstractMatrix)
@@ -147,7 +156,9 @@ function eig_gram(Kc::AbstractMatrix)
 end
 
 # ╔═╡ a66605f1-128c-4f04-913d-0da5b7ca8806
+#=╠═╡
 vals, vecs = eig_gram(K_center)
+  ╠═╡ =#
 
 # ╔═╡ 7830cfd8-9148-4deb-9101-25fa08c31e9a
 function k_PCA(vals, vecs, n_components=2)
@@ -164,7 +175,9 @@ end
 n_components = 2
 
 # ╔═╡ 52991237-d58d-4fe2-a6a2-73d74db47e75
+#=╠═╡
 pca, pca_importance = k_PCA(vals, vecs, n_components)
+  ╠═╡ =#
 
 # ╔═╡ 68cece24-e775-466f-87f1-a4c51465df53
 function get_pac_data(data, pca, pca_importance, n_components)
@@ -180,10 +193,14 @@ function get_pac_data(data, pca, pca_importance, n_components)
 end
 
 # ╔═╡ 38d74afa-eba1-49b1-b409-b03cac81ffbe
+#=╠═╡
 pca_data = get_pac_data(data, pca, pca_importance, n_components)
+  ╠═╡ =#
 
 # ╔═╡ b673f7d1-9020-4a00-a277-beb1972cb3ae
+#=╠═╡
 CSV.write("pca_data.csv", pca_data)
+  ╠═╡ =#
 
 # ╔═╡ 6831a957-5af9-4afa-9934-7703cb22ca98
 md"## look for indistinguishable molecules
@@ -195,6 +212,7 @@ warning: this takes a long time.
 idps_filename = "indistinguishable_pairs.jld2"
 
 # ╔═╡ ec7c6096-17bd-4960-9864-c34d0461114b
+#=╠═╡
 if ! isfile(idps_filename)
 	idps = indistinguishable_pairs(K)
 	jldsave(idps_filename; idps)
@@ -203,25 +221,36 @@ else
 	idps = load(idps_filename)["idps"]
 	idps
 end
+  ╠═╡ =#
 
 # ╔═╡ 2d129919-52e2-47a1-bc76-1b8ed486e452
+#=╠═╡
 md"indistinguishable pair browser. $(@bind duplicate_id PlutoUI.Slider(1:length(idps)))"
+  ╠═╡ =#
 
 # ╔═╡ 398f4803-8944-4a83-aece-64312ab8b925
+#=╠═╡
 mgs[idps[duplicate_id][1]].smiles
+  ╠═╡ =#
 
 # ╔═╡ 7e0299eb-a494-4730-b143-ad62e2ec43ba
+#=╠═╡
 mgs[idps[duplicate_id][2]].smiles
+  ╠═╡ =#
 
 # ╔═╡ 5f4aa5c8-39d3-4a57-8e06-ec15c6a914ba
+#=╠═╡
 if length(duplicate_id) > 0
 	viz(mgs[idps[duplicate_id][1]])
 end
+  ╠═╡ =#
 
 # ╔═╡ 7be50944-19f7-4cd7-b303-fdbee3f35d39
+#=╠═╡
 if length(duplicate_id) > 0
 	viz(mgs[idps[duplicate_id][2]])
 end
+  ╠═╡ =#
 
 # ╔═╡ 152425b0-a088-4790-91ce-84a1f1f0879c
 md"## using DPP sample molecules"
@@ -229,41 +258,57 @@ md"## using DPP sample molecules"
 # ╔═╡ 6f35c039-b1bc-4582-b359-b662c2036ba4
 n_run = 10
 
+# ╔═╡ 01ab8dba-1f1b-4bf7-adac-325a83fbae6e
+n_molecules = 200
+
+# ╔═╡ e08c959b-caf2-4d79-88f0-92061c98fbbd
+n_prop_swaps = floor(Int, n_molecules * log(n_molecules) * 10)
+
+# ╔═╡ 09368ec3-7034-4d59-8375-94982fdb00de
+2000*200
+
 # ╔═╡ 078f5e5f-0d6b-4f75-88ee-721e2654b237
 Threads.nthreads()
 
 # ╔═╡ 93c08f69-2571-49b3-bb33-4a81812739de
-function n_run_compute(method, n_run, molecule_L, n_molecules)
+function n_run_compute(method, n_run, molecule_L, n_molecules, n_prop_swaps)
 	
 	n_run_ids = [[] for n in 1:n_run]
 	@threads for n in 1:n_run
-		n_run_ids[n] = method(molecule_L, n_molecules)
+		n_run_ids[n] = method(molecule_L, n_molecules, n_steps=n_prop_swaps)
 	end
 	return DataFrame(n_run_ids, :auto)
 end
 
-# ╔═╡ 01ab8dba-1f1b-4bf7-adac-325a83fbae6e
-n_molecules = 10
-
 # ╔═╡ cfa54309-3be6-4f85-9c34-3b663da58625
-ids_molecule_mcmc_dpp = n_run_compute(mcmc_kdpp, n_run, K, n_molecules)
+# ╠═╡ disabled = true
+#=╠═╡
+ids_molecule_mcmc_dpp = n_run_compute(mcmc_kdpp, n_run, K, n_molecules, n_prop_swaps)
+  ╠═╡ =#
 
 # ╔═╡ 08035090-1e8a-4488-838f-4aa6f1760091
+#=╠═╡
 CSV.write("smell_ids_molecule_mcmc_dpp_$(n_molecules).csv", ids_molecule_mcmc_dpp)
+  ╠═╡ =#
 
 # ╔═╡ ca5e57b6-fe95-4a02-a0df-a39aa6809898
 md" ## uniform sample molecules"
 
 # ╔═╡ 8c50f261-e139-4e34-a7c5-eea760a80d73
-function uniform(K, n_molecules)
+function uniform(K, n_molecules; n_steps=false)
 	return sample(collect(1:K.size[1]), n_molecules)
 end
 
 # ╔═╡ 91630bec-6ac6-45a7-b0f2-0b9144b81248
-ids_molecule_uniform = n_run_compute(uniform, n_run, K, n_molecules)
+# ╠═╡ disabled = true
+#=╠═╡
+ids_molecule_uniform = n_run_compute(uniform, n_run, K, n_molecules, false)
+  ╠═╡ =#
 
 # ╔═╡ 72dd3d57-fa93-44e0-bdbe-dd569ac1b47d
+#=╠═╡
 CSV.write("smell_ids_molecule_uniform_$(n_molecules).csv", ids_molecule_uniform)
+  ╠═╡ =#
 
 # ╔═╡ d1f679ee-7c13-4bf9-a829-50b6bc43b729
 md" # surfactant"
@@ -317,7 +362,8 @@ s_gram_matrix_filename = "s_gram_matrix.jld2"
 surfactant_Ks = compute_kernel(s_mgs, s_gram_matrix_filename)
 
 # ╔═╡ 378aae95-4367-43de-aca0-c48efda8ea86
-surfactant_K = normalize_Gram_matrix(surfactant_Ks[true] .+ surfactant_Ks[false])
+surfactant_K = 
+	normalize_Gram_matrix(surfactant_Ks[true]) .+ normalize_Gram_matrix(surfactant_Ks[false])
 
 # ╔═╡ 23eaf7f6-ad0f-4511-a0f5-b84211d11525
 CSV.write("s_Gram_matrix.csv", DataFrame(surfactant_K, :auto))
@@ -345,21 +391,26 @@ CSV.write("s_pca_data.csv", surfactant_pca_data)
 md" ## DPP sample"
 
 # ╔═╡ 91231e5d-b56d-4ae2-bbd3-874712be0f2c
-s_ids_molecule_mcmc_dpp = n_run_compute(mcmc_kdpp, n_run, surfactant_K, n_molecules)
+s_ids_molecule_mcmc_dpp = n_run_compute(mcmc_kdpp, n_run, surfactant_K, n_molecules, n_prop_swaps)
 
 # ╔═╡ 687a41a6-a674-465f-bfba-4a51d210d964
+#=╠═╡
 CSV.write("surfactant_ids_molecule_mcmc_dpp_$(n_molecules).csv", s_ids_molecule_mcmc_dpp)
+  ╠═╡ =#
 
 # ╔═╡ be4a4443-e35b-44b2-aef9-5328c6e86b27
 md" ## uniform sample"
 
 # ╔═╡ 95971452-7114-485a-890f-025f4281c238
-s_ids_molecule_uniform = n_run_compute(uniform, n_run, surfactant_K, n_molecules)
+s_ids_molecule_uniform = n_run_compute(uniform, n_run, surfactant_K, n_molecules, false)
 
 # ╔═╡ 4d973804-8ddc-4126-8507-2a79dfdc23e7
+#=╠═╡
 CSV.write("surfactant_ids_molecule_uniform_$(n_molecules).csv", s_ids_molecule_uniform)
+  ╠═╡ =#
 
 # ╔═╡ 26e55e20-cf02-4372-988e-3175060f0265
+#=╠═╡
 begin
 	n_nv_dpp = zeros(10)
 	for (n_i, id) in enumerate(ids_molecule_mcmc_dpp[!, 2])
@@ -367,6 +418,116 @@ begin
 		n_nv_dpp[n_i] = nv(mg_dpp.g)
 	end
 end
+  ╠═╡ =#
+
+# ╔═╡ 1cf3026b-e5d2-46b2-b84d-c54611fbb0c3
+md"# 🐝 ApisTox"
+
+# ╔═╡ 26f9561c-4d25-4e9a-a7d1-ec82febf6b6e
+md" ### read data"
+
+# ╔═╡ b5525cd7-f4d1-4a89-b047-ed58215d3212
+begin
+	raw_train = CSV.read("maxmin_train.csv", DataFrame)
+	raw_test = CSV.read("maxmin_test.csv", DataFrame)
+	
+	raw_train[!, :split] .= "train"
+	raw_test[!, :split] .= "test"
+	
+	raw_bee_data = vcat(raw_train, raw_test)
+end
+
+# ╔═╡ 2ea03ffa-774c-478b-9d9e-de9f5d125e42
+begin
+	bee_troublesome_molecules = String[]
+	
+	for (i, smiles) in enumerate(raw_bee_data.SMILES)
+	    try
+	        mol = MolGraph(smiles)
+	        find_shortest_paths!(mol)
+	    catch e
+	        push!(bee_troublesome_molecules, smiles)
+	    end
+	end
+end
+
+# ╔═╡ 7d517593-40fb-47b6-9e1a-cf58d7ef671c
+begin
+	bee_data = filter(
+		row -> ! (row["SMILES"] in bee_troublesome_molecules), raw_bee_data
+	)
+	
+	train_idx = findall(bee_data[!, :split] .== "train")
+	
+	bee_data = select(bee_data, [:SMILES, :label, :split])
+end
+
+# ╔═╡ ca3bfefc-e96c-49c2-a0b0-4ba448de249a
+@time begin
+	bee_mgs = MolGraph.(bee_data[:, "SMILES"])
+	for bee_mg in bee_mgs
+		find_shortest_paths!(bee_mg)
+	end
+end
+
+# ╔═╡ 13e395e1-c2e8-41f5-b22c-f9b38a43e161
+md" ## compute gram matrix"
+
+# ╔═╡ a51bf88c-9c91-435d-aadd-08d5604c3357
+begin
+	bee_gram_matrix_filename = "bee_gram_matrix.jld2"
+	bee_Ks = compute_kernel(bee_mgs, bee_gram_matrix_filename)
+	bee_K = normalize_Gram_matrix(bee_Ks[true]) .+ normalize_Gram_matrix(bee_Ks[false])
+	CSV.write("bee_Gram_matrix.csv", DataFrame(bee_K, :auto))
+end
+
+# ╔═╡ 0f14910c-1213-4854-aa90-1fd71d5b1e35
+md"### PCA"
+
+# ╔═╡ 97b37842-4bdf-42a8-a6a6-4a1647c9064a
+begin
+	bee_K_center = center_Gram_matrix(bee_K)
+	bee_vals, bee_vecs = eig_gram(bee_K_center)
+	bee_pca, bee_pca_importance = k_PCA(
+		bee_vals, bee_vecs, n_components
+	)
+	bee_pca_data = get_pac_data(
+		bee_data, bee_pca, bee_pca_importance, n_components
+	)
+	CSV.write("bee_pca_data.csv", bee_pca_data)
+end
+
+# ╔═╡ b93b421c-55c6-4ce0-b190-e46d6527830e
+md"### DPP sample"
+
+# ╔═╡ 6c203e28-8afc-4fda-806c-875adf852e1e
+# ╠═╡ disabled = true
+#=╠═╡
+bee_ids_molecule_mcmc_dpp = n_run_compute(
+	mcmc_kdpp, n_run, bee_K[train_idx, train_idx], n_molecules, n_prop_swaps
+)
+  ╠═╡ =#
+
+# ╔═╡ b2227527-b8fd-4503-9de3-e5330fdd3ce5
+#=╠═╡
+CSV.write("bee_ids_molecule_mcmc_dpp_$(n_molecules).csv", bee_ids_molecule_mcmc_dpp)
+  ╠═╡ =#
+
+# ╔═╡ 4099f983-0bed-462c-b64c-5ddc2e5196d7
+md"### uniform sampling"
+
+# ╔═╡ ed59e2f6-d846-48b0-8111-971c4e20dd6d
+# ╠═╡ disabled = true
+#=╠═╡
+bee_ids_molecule_uniform = n_run_compute(
+	uniform, n_run, bee_K[train_idx, train_idx], n_molecules, false
+)
+  ╠═╡ =#
+
+# ╔═╡ 9759d749-a38e-4c5e-8651-591dc1bbdd1b
+#=╠═╡
+CSV.write("bee_ids_molecule_uniform_$(n_molecules).csv", bee_ids_molecule_uniform)
+  ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╠═cecf3058-bb8f-11f0-97f3-bda46249b7c9
@@ -410,9 +571,11 @@ end
 # ╠═7be50944-19f7-4cd7-b303-fdbee3f35d39
 # ╟─152425b0-a088-4790-91ce-84a1f1f0879c
 # ╠═6f35c039-b1bc-4582-b359-b662c2036ba4
+# ╠═01ab8dba-1f1b-4bf7-adac-325a83fbae6e
+# ╠═e08c959b-caf2-4d79-88f0-92061c98fbbd
+# ╠═09368ec3-7034-4d59-8375-94982fdb00de
 # ╠═078f5e5f-0d6b-4f75-88ee-721e2654b237
 # ╠═93c08f69-2571-49b3-bb33-4a81812739de
-# ╠═01ab8dba-1f1b-4bf7-adac-325a83fbae6e
 # ╠═cfa54309-3be6-4f85-9c34-3b663da58625
 # ╠═08035090-1e8a-4488-838f-4aa6f1760091
 # ╟─ca5e57b6-fe95-4a02-a0df-a39aa6809898
@@ -427,7 +590,7 @@ end
 # ╠═384fb2a3-f30d-4801-99ce-f291f1390b2e
 # ╠═4363cda4-d95b-464f-952d-97204a614796
 # ╠═26796e29-83dc-484b-af45-69fdfbbddd4d
-# ╟─66969b1d-5007-4f7f-9c21-a3bfaf7d0484
+# ╠═66969b1d-5007-4f7f-9c21-a3bfaf7d0484
 # ╠═c8ff6352-5873-443e-881b-66de42461763
 # ╠═c77da8c2-852e-47b3-901b-1b7d2c2d2114
 # ╠═378aae95-4367-43de-aca0-c48efda8ea86
@@ -444,3 +607,19 @@ end
 # ╠═95971452-7114-485a-890f-025f4281c238
 # ╠═4d973804-8ddc-4126-8507-2a79dfdc23e7
 # ╠═26e55e20-cf02-4372-988e-3175060f0265
+# ╟─1cf3026b-e5d2-46b2-b84d-c54611fbb0c3
+# ╟─26f9561c-4d25-4e9a-a7d1-ec82febf6b6e
+# ╠═b5525cd7-f4d1-4a89-b047-ed58215d3212
+# ╠═2ea03ffa-774c-478b-9d9e-de9f5d125e42
+# ╠═7d517593-40fb-47b6-9e1a-cf58d7ef671c
+# ╠═ca3bfefc-e96c-49c2-a0b0-4ba448de249a
+# ╠═13e395e1-c2e8-41f5-b22c-f9b38a43e161
+# ╠═a51bf88c-9c91-435d-aadd-08d5604c3357
+# ╠═0f14910c-1213-4854-aa90-1fd71d5b1e35
+# ╠═97b37842-4bdf-42a8-a6a6-4a1647c9064a
+# ╟─b93b421c-55c6-4ce0-b190-e46d6527830e
+# ╠═6c203e28-8afc-4fda-806c-875adf852e1e
+# ╠═b2227527-b8fd-4503-9de3-e5330fdd3ce5
+# ╟─4099f983-0bed-462c-b64c-5ddc2e5196d7
+# ╠═ed59e2f6-d846-48b0-8111-971c4e20dd6d
+# ╠═9759d749-a38e-4c5e-8651-591dc1bbdd1b
