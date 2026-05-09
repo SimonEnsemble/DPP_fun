@@ -19,10 +19,9 @@ end
 # ╔═╡ cecf3058-bb8f-11f0-97f3-bda46249b7c9
 begin
 	import Pkg; Pkg.activate()
-	using ShortestPathMolecularGraphKernels, MCMCkDPP, Base.Threads
-	using CairoMakie, Printf, LinearAlgebra, DataFrames, CSV, StatsBase,
+	using ShortestPathMolecularGraphKernels, MCMCkDPP, Base.Threads,
+		CairoMakie, Printf, LinearAlgebra, DataFrames, CSV, StatsBase,
 		PlutoUI, JLD2, Test, Graphs, MakieThemes, Statistics, SparseArrays
-	import MolecularGraph
 
 	set_theme!(ggthemr(:pale))
 end
@@ -35,23 +34,6 @@ datapath = "data_from_Julia"
 
 # ╔═╡ 13a4b4ce-dfdd-4125-b794-1b5667c22a00
 isdir(datapath) || mkdir(datapath)
-
-# ╔═╡ 5d60d66e-ce53-41d1-8bb8-9aa1daa923ee
-md"# utilities"
-
-# ╔═╡ 76144644-aac5-4d0e-9535-20344b360239
-function get_troublesome_molecules(smiles_list::Vector{String})
-	troublesome_molecules = String[]
-	for (i, smiles) in enumerate(smiles_list)
-	    try
-	        mol = MolGraph(smiles)
-	        find_shortest_paths!(mol)
-	    catch e
-	        push!(troublesome_molecules, smiles)
-	    end
-	end
-	return troublesome_molecules
-end
 
 # ╔═╡ 2d92e910-ee92-461b-ad49-c250787932c4
 @bind dataset Select(["smells", "bees", "surfactants"])
@@ -86,6 +68,20 @@ md"
 ### filter out troublesome molecules
 filter out the molecules that do not constitute connected graphs. this occurs e.g. when the molecule has non-bonded components, indicated by the period in the SMILES. some of the molecules also cannot be read by `MolecularGraphs.jl`."
 
+# ╔═╡ 76144644-aac5-4d0e-9535-20344b360239
+function get_troublesome_molecules(smiles_list::Vector{String})
+	troublesome_molecules = String[]
+	for (i, smiles) in enumerate(smiles_list)
+	    try
+	        mol = MolGraph(smiles)
+	        find_shortest_paths!(mol)
+	    catch e
+	        push!(troublesome_molecules, smiles)
+	    end
+	end
+	return troublesome_molecules
+end
+
 # ╔═╡ e74a68b2-cda6-466c-9ccf-78d690c335fd
 troublesome_molecules = get_troublesome_molecules(raw_data[:, "molecule"])
 
@@ -93,7 +89,7 @@ troublesome_molecules = get_troublesome_molecules(raw_data[:, "molecule"])
 data = filter(row -> ! (row["molecule"] in troublesome_molecules), raw_data)
 
 # ╔═╡ 017b6abe-fadd-4697-96ba-7454e375f668
-md"## 🧪🚗 construct the molecular graphs and find shortest paths
+md"## 🚗 construct the molecular graphs and find shortest paths
 "
 
 # ╔═╡ 31e64f9f-6048-467d-8906-64298cae8db9
@@ -245,51 +241,47 @@ n_molecules = 200
 # ╔═╡ e08c959b-caf2-4d79-88f0-92061c98fbbd
 n_prop_swaps = floor(Int, n_molecules * log(n_molecules) * 10)
 
+# ╔═╡ 93c08f69-2571-49b3-bb33-4a81812739de
+function draw_dpp_samples(n_runs, K, n_molecules, n_prop_swaps)
+	ids_dpp = [[] for n in 1:n_runs]
+	@threads for n in 1:n_runs
+		ids, na, np = mcmc_kdpp(K, n_molecules, n_prop_swaps=n_prop_swaps)
+		@printf("%d/%d swaps accepted\n", na, np)
+		ids_dpp[n] = ids
+	end
+	return DataFrame(ids_dpp, :auto)
+end
+
+# ╔═╡ a9871b55-fbd6-4644-93f4-a53338e935f0
+ids_dpp = draw_dpp_samples(n_runs, K, n_molecules, n_prop_swaps)
+
+# ╔═╡ 08035090-1e8a-4488-838f-4aa6f1760091
+CSV.write(joinpath(datapath, "ids_dpp_$(n_molecules)_$dataset.csv"), ids_dpp)
+
 # ╔═╡ 40cf1543-8e17-4755-a28f-2627689bb59b
 ids_uniform = [
 	sample(collect(1:K.size[1]), n_molecules)
 	for r = 1:n_runs
 ]
 
-# ╔═╡ 93c08f69-2571-49b3-bb33-4a81812739de
-function draw_dpp_samples(n_runs, K, n_molecules, n_prop_swaps)
-	ids_dpp = [[] for n in 1:n_run]
-	@threads for n in 1:n_run
-		ids_dpp[n] = mcmc_kdpp(K, n_molecules, n_prop_swaps=n_prop_swaps)
-	end
-	return DataFrame(ids_dpp, :auto)
-end
-
-# ╔═╡ a9871b55-fbd6-4644-93f4-a53338e935f0
-ids_dpp = draw_dpp_samples(n_runs, K, n_molecules, 10)
-
-# ╔═╡ cfa54309-3be6-4f85-9c34-3b663da58625
-# ╠═╡ disabled = true
-#=╠═╡
-ids_molecule_mcmc_dpp = n_run_compute(mcmc_kdpp, n_run, K, n_molecules, n_prop_swaps)
-  ╠═╡ =#
-
-# ╔═╡ 08035090-1e8a-4488-838f-4aa6f1760091
-CSV.write(joinpath(datapath, "ids_dpp_$(n_molecules)_$dataset.csv"), ids_dpp)
-
 # ╔═╡ 72dd3d57-fa93-44e0-bdbe-dd569ac1b47d
-#=╠═╡
-CSV.write(joinpath(datapath, "smell_ids_molecule_uniform_$(n_molecules).csv"), ids_molecule_uniform)
-  ╠═╡ =#
+CSV.write(
+	joinpath(datapath, "ids_uniform_$(n_molecules)_$dataset.csv"), 
+	DataFrame(ids_uniform, :auto)
+)
 
 # ╔═╡ Cell order:
 # ╠═cecf3058-bb8f-11f0-97f3-bda46249b7c9
 # ╠═79adcae5-192f-470b-898d-7688e8041054
 # ╠═2cbd393f-5f89-40a1-8489-8b2bcd038856
 # ╠═13a4b4ce-dfdd-4125-b794-1b5667c22a00
-# ╟─5d60d66e-ce53-41d1-8bb8-9aa1daa923ee
-# ╠═76144644-aac5-4d0e-9535-20344b360239
 # ╠═2d92e910-ee92-461b-ad49-c250787932c4
 # ╟─d7b41ed5-53af-4c48-bc5c-3c8e1554a2ee
 # ╠═a79cd32d-cb9a-4129-ad20-2833bad1c2ab
 # ╠═713ba284-16d7-45b6-ab97-e200cb101863
 # ╠═9044a157-a02f-43e1-a693-6ed5b85e6339
 # ╟─f7a06153-1014-412d-91de-dc430ee1f5e8
+# ╠═76144644-aac5-4d0e-9535-20344b360239
 # ╠═e74a68b2-cda6-466c-9ccf-78d690c335fd
 # ╠═3c85b30a-b1d7-4d84-a206-b9b47f894125
 # ╟─017b6abe-fadd-4697-96ba-7454e375f668
@@ -324,9 +316,8 @@ CSV.write(joinpath(datapath, "smell_ids_molecule_uniform_$(n_molecules).csv"), i
 # ╠═6f35c039-b1bc-4582-b359-b662c2036ba4
 # ╠═01ab8dba-1f1b-4bf7-adac-325a83fbae6e
 # ╠═e08c959b-caf2-4d79-88f0-92061c98fbbd
-# ╠═40cf1543-8e17-4755-a28f-2627689bb59b
 # ╠═93c08f69-2571-49b3-bb33-4a81812739de
 # ╠═a9871b55-fbd6-4644-93f4-a53338e935f0
-# ╠═cfa54309-3be6-4f85-9c34-3b663da58625
 # ╠═08035090-1e8a-4488-838f-4aa6f1760091
+# ╠═40cf1543-8e17-4755-a28f-2627689bb59b
 # ╠═72dd3d57-fa93-44e0-bdbe-dd569ac1b47d
