@@ -334,10 +334,11 @@ if dataset != "bees"
 	train_ids = sample(1:n, round(Int, train_ratio * n), replace=false)
 	test_ids = setdiff(1:n, train_ids)
 else
-	train = CSV.read(joinpath(datapath, "maxmin_train.csv"), DataFrame)
+	train = CSV.read(joinpath(datapath, "maxmin_train.csv"), DataFrame) #"time_train.csv"
 	train = filter(row -> ! (row["SMILES"] in troublesome_molecules), train)
 	train_ids = collect(1:nrow(train))
 	test = CSV.read(joinpath(datapath, "maxmin_test.csv"), DataFrame)
+	#"time_test.csv"
 	test = filter(row -> ! (row["SMILES"] in troublesome_molecules), test)
 	perfect_data = vcat(train, test)
 	test_ids = setdiff(collect(1:nrow(perfect_data)), train_ids)
