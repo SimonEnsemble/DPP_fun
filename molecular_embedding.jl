@@ -18,7 +18,7 @@ end
 
 # ╔═╡ cecf3058-bb8f-11f0-97f3-bda46249b7c9
 begin
-	import Pkg; Pkg.activate()
+	import Pkg; Pkg.activate() #"diffusion_env" DiffusionMap
 	using ShortestPathMolecularGraphKernels, MCMCkDPP, Base.Threads,
 		CairoMakie, Printf, LinearAlgebra, DataFrames, CSV, StatsBase,
 		PlutoUI, JLD2, Test, Graphs, MakieThemes, Statistics, SparseArrays,
@@ -186,25 +186,40 @@ n_components = 2
 # ╔═╡ 52991237-d58d-4fe2-a6a2-73d74db47e75
 pca, pca_importance = k_PCA(vals, vecs, n_components)
 
+# ╔═╡ 91771f45-9b30-4247-9ec6-e577ba1b45a6
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	# diffusion_map
+	P = Ks[true] .+ Ks[false]
+	P[P .< 0] .= 0
+	normalize_to_stochastic_matrix!(P)
+	X = diffusion_map(P, 2; t=1)
+end
+  ╠═╡ =#
+
 # ╔═╡ 68762c22-f3fb-48c2-938b-a1c57910eb4d
-if dataset == "CMC"
+if dataset == "surfactants"
 	CSV.write(
 		joinpath(datapath, "PCA.csv"), 
 		DataFrame("SMILES" => data[:, :SMILES], "CMC" => data[:, :CMC],
-				  "x1" => pca[:, 1], "x2" => pca[:, 2])
-	)
+				  "x1" => pca[:, 1], "x2" => pca[:, 2]
+				  # "d1" => X[:, 1], "d2" => X[:, 2])
+	))
 elseif dataset == "bees"
 	CSV.write(
 		joinpath(datapath, "PCA.csv"), 
 		DataFrame("SMILES" => data[:, :SMILES], "toxic" => data[:, :label],
-				  "x1" => pca[:, 1], "x2" => pca[:, 2])
-	)
+				  "x1" => pca[:, 1], "x2" => pca[:, 2] 
+				  # "d1" => X[:, 1], "d2" => X[:, 2])
+	))
 elseif dataset == "smells"
 	CSV.write(
 		joinpath(datapath, "PCA.csv"), 
 		DataFrame([name => data[:, name] for name in names(data)]...,
-				  "x1" => pca[:, 1], "x2" => pca[:, 2])
-	)
+				  "x1" => pca[:, 1], "x2" => pca[:, 2]
+				  # "d1" => X[:, 1], "d2" => X[:, 2])
+	))
 end
 
 # ╔═╡ 8012f081-7e0f-44ab-a4e1-3d6a14632b04
@@ -305,14 +320,34 @@ left_ids = [rand(ids) for ids in ids_pairs]
 @bind remove_all CheckBox()
 
 # ╔═╡ 832b7ad8-5b61-4d68-b4ba-c1dd082f2d30
-if remove_all
-	perfect_data = data[setdiff(1:nrow(data), same_kernel_row), :]
+if dataset != "bees"
+	if remove_all
+		perfect_data = data[setdiff(1:nrow(data), same_kernel_row), :]
+	else
+		perfect_data = data[setdiff(1:nrow(data), left_ids), :]
+	end
+	Random.seed!(123)  
+	
+	n = nrow(perfect_data)
+	train_ratio = 0.8
+	
+	train_ids = sample(1:n, round(Int, train_ratio * n), replace=false)
+	test_ids = setdiff(1:n, train_ids)
 else
-	perfect_data = data[setdiff(1:nrow(data), left_ids), :]
+	train = CSV.read(joinpath(datapath, "maxmin_train.csv"), DataFrame)
+	train = filter(row -> ! (row["SMILES"] in troublesome_molecules), train)
+	train_ids = collect(1:nrow(train))
+	test = CSV.read(joinpath(datapath, "maxmin_test.csv"), DataFrame)
+	test = filter(row -> ! (row["SMILES"] in troublesome_molecules), test)
+	perfect_data = vcat(train, test)
+	test_ids = setdiff(collect(1:nrow(perfect_data)), train_ids)
 end
 
 # ╔═╡ be92a1df-44ea-44fd-abc9-0fd583d2d46e
 gram_matrix_perfect_filename = joinpath(datapath, "gram_matrix_perfect.jld2")
+
+# ╔═╡ f1db597b-7fdf-4973-8cc1-7dc7ac1653b6
+perfect_data
 
 # ╔═╡ f290cd95-b18e-4782-9af3-2670016ea2bb
 begin
@@ -325,6 +360,10 @@ begin
 	K_center_perfect = center_Gram_matrix(K_perfect)
 	vals_perfect, vecs_perfect = eig_gram(K_center_perfect)
 	pca_perfect, pca_importance_perfect = k_PCA(vals_perfect, vecs_perfect, n_components)
+	P_perfect = Ks_perfect[true] .+ Ks_perfect[false]
+	# P_perfect[P_perfect .< 0] .= 0
+	# normalize_to_stochastic_matrix!(P_perfect)
+	# X_perfect = diffusion_map(P_perfect, 2; t=1)
 	CSV.write(joinpath(datapath, "Gram_matrix_perfect.csv"), DataFrame(K_perfect, :auto))
 	
 	if dataset == "surfactants"
@@ -333,22 +372,25 @@ begin
 		DataFrame(
 			"SMILES" => perfect_data[:, :SMILES], 
 			"CMC" => perfect_data[:, :CMC],
-			"x1" => pca_perfect[:, 1], "x2" => pca_perfect[:, 2])
-	)
+			"x1" => pca_perfect[:, 1], "x2" => pca_perfect[:, 2], 
+			# "d1" => X_perfect[:, 1], "d2" => X_perfect[:, 2])
+	))
 	elseif dataset == "bees"
 		CSV.write(
 			joinpath(datapath, "PCA_perfect.csv"), 
 			DataFrame(
 				"SMILES" => perfect_data[:, :SMILES], 
 				"toxic" => perfect_data[:, :label],
-				"x1" => pca_perfect[:, 1], "x2" => pca_perfect[:, 2])
-		)
+				"x1" => pca_perfect[:, 1], "x2" => pca_perfect[:, 2], 
+				# "d1" => X_perfect[:, 1], "d2" => X_perfect[:, 2])
+		))
 	elseif dataset == "smells"
 		CSV.write(
 			joinpath(datapath, "PCA_perfect.csv"), 
 			DataFrame(
-				[name => perfect_data[:, name] for name in names(perfect_data)]..., "x1" => pca_perfect[:, 1], "x2" => pca_perfect[:, 2])
-		)
+				[name => perfect_data[:, name] for name in names(perfect_data)]..., "x1" => pca_perfect[:, 1], "x2" => pca_perfect[:, 2], 
+				# "d1" => X_perfect[:, 1], "d2" => X_perfect[:, 2])
+		))
 	end
 	
 	CSV.write(
@@ -357,22 +399,8 @@ begin
 	)
 end
 
-# ╔═╡ d0d392ba-f22c-4ead-9c8f-6f967d9f8a06
-K_perfect
-
 # ╔═╡ 09893808-aee3-4b18-b5e8-8866f2398b31
 md"## split data"
-
-# ╔═╡ 359ce1a3-a18e-4478-9196-d078cc6fa763
-begin
-	Random.seed!(123)  
-	
-	n = nrow(perfect_data)
-	train_ratio = 0.8
-	
-	train_ids = sample(1:n, round(Int, train_ratio * n), replace=false)
-	test_ids = setdiff(1:n, train_ids)
-end
 
 # ╔═╡ e1d7e437-1510-4131-92b8-4913390ba498
 CSV.write(
@@ -393,7 +421,7 @@ md"## using DPP sample molecules"
 n_runs = 10
 
 # ╔═╡ 01ab8dba-1f1b-4bf7-adac-325a83fbae6e
-n_molecules = 200
+n_molecules = 10
 
 # ╔═╡ e08c959b-caf2-4d79-88f0-92061c98fbbd
 n_prop_swaps = floor(Int, n_molecules * log(n_molecules) * 10)
@@ -471,6 +499,7 @@ CSV.write(
 # ╠═7830cfd8-9148-4deb-9101-25fa08c31e9a
 # ╠═3a756f2c-cbad-4bc2-a031-9d888f5d7b1f
 # ╠═52991237-d58d-4fe2-a6a2-73d74db47e75
+# ╠═91771f45-9b30-4247-9ec6-e577ba1b45a6
 # ╠═68762c22-f3fb-48c2-938b-a1c57910eb4d
 # ╠═8012f081-7e0f-44ab-a4e1-3d6a14632b04
 # ╟─6831a957-5af9-4afa-9934-7703cb22ca98
@@ -492,10 +521,9 @@ CSV.write(
 # ╠═5ce78e63-6c3d-49ef-bf51-a320041c381e
 # ╠═832b7ad8-5b61-4d68-b4ba-c1dd082f2d30
 # ╠═be92a1df-44ea-44fd-abc9-0fd583d2d46e
+# ╠═f1db597b-7fdf-4973-8cc1-7dc7ac1653b6
 # ╠═f290cd95-b18e-4782-9af3-2670016ea2bb
-# ╠═d0d392ba-f22c-4ead-9c8f-6f967d9f8a06
-# ╠═09893808-aee3-4b18-b5e8-8866f2398b31
-# ╠═359ce1a3-a18e-4478-9196-d078cc6fa763
+# ╟─09893808-aee3-4b18-b5e8-8866f2398b31
 # ╠═e1d7e437-1510-4131-92b8-4913390ba498
 # ╠═1d69b104-c8ff-4340-bf36-e501a47fea51
 # ╟─152425b0-a088-4790-91ce-84a1f1f0879c

@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.1"
+__generated_with = "0.23.8"
 app = marimo.App(width="medium")
 
 
@@ -107,7 +107,7 @@ def _(data):
 def _(datapath, pd):
     PCA_importance = pd.read_csv(datapath + "/PCA_importance.csv")
     PCA_importance
-    return (PCA_importance,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -156,58 +156,58 @@ def _(dropdown, mo, smell):
 
 
 @app.cell
-def _(PCA_importance, alt, data, dropdown, mo, smell, x, y):
+def _(alt, data, dropdown, mo, smell, x, y):
     if dropdown.value == "smells":
         other_points = alt.Chart(data[data[smell.value] == 0]).mark_point(
             color="lightgray",
             opacity=0.8
         ).encode(
-            x=alt.X(x.value, scale=alt.Scale(domain=[-1, 1]), title=f"{x.value} ({PCA_importance['imp'][0]:.2f})"),
-            y=alt.Y(y.value, scale=alt.Scale(domain=[-1, 1]), title=f"{y.value} ({PCA_importance['imp'][1]:.2f})"),
+            x=x.value,#alt.X(x.value, scale=alt.Scale(domain=[-1, 1]), title=f"{x.value} ({PCA_importance['imp'][0]:.2f})"),
+            y=y.value,#alt.Y(y.value, scale=alt.Scale(domain=[-1, 1]), title=f"{y.value} ({PCA_importance['imp'][1]:.2f})"),
             tooltip=["image", smell.value]
         )
-    
+
         smell_points = alt.Chart(data[data[smell.value] == 1]).mark_point(
             color="red",
             opacity=1.0
         ).encode(
-            x=alt.X(x.value, scale=alt.Scale(domain=[-1, 1])),
-            y=alt.Y(y.value, scale=alt.Scale(domain=[-1, 1])),
+            x=x.value,#alt.X(x.value, scale=alt.Scale(domain=[-1, 1])),
+            y=y.value,#alt.Y(y.value, scale=alt.Scale(domain=[-1, 1])),
             tooltip=["image", smell.value]
         )
-    
+
         chart = (other_points + smell_points).properties(
             width=400,
             height=400
         )
-    
+
         out = mo.ui.altair_chart(chart)
-    
+
     elif dropdown.value == "surfactants":
         other_points = alt.Chart(data).mark_point(
             color="lightgray",
             opacity=0.8
         ).encode(
-            x=alt.X(x.value, scale=alt.Scale(domain=[-1, 1]), title=f"{x.value} ({PCA_importance['imp'][0]:.2f})"),
-            y=alt.Y(y.value, scale=alt.Scale(domain=[-1, 1]), title=f"{y.value} ({PCA_importance['imp'][1]:.2f})"),
+            x=x.value,#alt.X(x.value, scale=alt.Scale(domain=[-1, 1]), title=f"{x.value} ({PCA_importance['imp'][0]:.2f})"),
+            y=y.value,#alt.Y(y.value, scale=alt.Scale(domain=[-1, 1]), title=f"{y.value} ({PCA_importance['imp'][1]:.2f})"),
             tooltip=["image"]
         )
-    
+
         smell_points = alt.Chart(data).mark_point(
             opacity=1.0
         ).encode(
-            x=alt.X(x.value, scale=alt.Scale(domain=[-1, 1])),
-            y=alt.Y(y.value, scale=alt.Scale(domain=[-1, 1])),
+            x=x.value,#alt.X(x.value, scale=alt.Scale(domain=[-1, 1])),
+            y=y.value,#alt.Y(y.value, scale=alt.Scale(domain=[-1, 1])),
             color=alt.Color("log_CMC:Q", scale=alt.Scale(scheme="viridis")),
             tooltip=["image"]
         )
-    
-    
+
+
         chart = (other_points + smell_points).properties(
             width=400,
             height=400
         )
-    
+
         out = mo.ui.altair_chart(chart)
 
     elif dropdown.value == "bees":
@@ -215,25 +215,25 @@ def _(PCA_importance, alt, data, dropdown, mo, smell, x, y):
             color="lightgray",
             opacity=0.8
         ).encode(
-            x=alt.X(x.value, scale=alt.Scale(domain=[-1, 1]), title=f"{x.value} ({PCA_importance['imp'][0]:.2f})"),
-            y=alt.Y(y.value, scale=alt.Scale(domain=[-1, 1]), title=f"{y.value} ({PCA_importance['imp'][1]:.2f})"),
+            x=x.value,#=alt.X(x.value, scale=alt.Scale(domain=[-1, 1]), title=f"{x.value} ({PCA_importance['imp'][0]:.2f})"),
+            y=y.value,#=alt.Y(y.value, scale=alt.Scale(domain=[-1, 1]), title=f"{y.value} ({PCA_importance['imp'][1]:.2f})"),
             tooltip=["image", "toxic"]
         )
-    
+
         toxic_points = alt.Chart(data[data["toxic"] == 1]).mark_point(
             color="red",
             opacity=1.0
         ).encode(
-            x=alt.X(x.value, scale=alt.Scale(domain=[-1, 1])),
-            y=alt.Y(y.value, scale=alt.Scale(domain=[-1, 1])),
+            x=x.value,#=alt.X(x.value, scale=alt.Scale(domain=[-1, 1])),
+            y=y.value,#=alt.Y(y.value, scale=alt.Scale(domain=[-1, 1])),
             tooltip=["image", "toxic"]
         )
-    
+
         bee_chart = (non_toxic_points + toxic_points).properties(
             width=400,
             height=400
         )
-    
+
         out = mo.ui.altair_chart(bee_chart)
 
     out
@@ -258,17 +258,7 @@ def _(pd):
 
 
 @app.cell
-def _(
-    PCA_importance,
-    alt,
-    datapath,
-    get_selected_data,
-    mo,
-    np,
-    pca_range,
-    x,
-    y,
-):
+def _(alt, datapath, get_selected_data, mo, np, pca_range, x, y):
     def selected_molecules(data, selected_ids, pca_range=pca_range):
         plot_data = data.copy()
         plot_data["selected"] = 0
@@ -277,8 +267,8 @@ def _(
         train_data = plot_data.loc[train_idx]
         plot_data.loc[train_idx[selected_ids], "selected"] = 1
 
-        plot_x = alt.X(x.value, scale=alt.Scale(domain=pca_range), title=f"{x.value} ({PCA_importance['imp'][0]:.2f})")
-        plot_y = alt.Y(y.value, scale=alt.Scale(domain=pca_range), title=f"{y.value} ({PCA_importance['imp'][1]:.2f})")
+        plot_x = x.value#alt.X(x.value, scale=alt.Scale(domain=pca_range), title=f"{x.value} ({PCA_importance['imp'][0]:.2f})")
+        plot_y = y.value#alt.Y(y.value, scale=alt.Scale(domain=pca_range), title=f"{y.value} ({PCA_importance['imp'][1]:.2f})")
 
         other_molecules = alt.Chart(plot_data[plot_data["selected"] == 0]).mark_point(
             color="lightgray",
@@ -483,7 +473,7 @@ def _(
     plt,
     root_mean_squared_error,
 ):
-    n_data_list = [10, 20, 50, 100, 150]
+    n_data_list = [10, 20, 50, 80, 100]
     n_data = len(n_data_list)
     train_idx = np.array(get_selected_data(datapath + '/train_data.csv')).ravel()
     test_idx = np.array(get_selected_data(datapath + '/test_data.csv')).ravel()
@@ -493,20 +483,20 @@ def _(
         dpp_f1_std = np.zeros(n_data)
         uniform_f1 = np.zeros(n_data)
         uniform_f1_std = np.zeros(n_data)
-    
+
         Y = data[interesting_smells].to_numpy()
 
         for n in range(n_data):
             dpp_s = get_selected_data(datapath + f'/ids_dpp_{n_data_list[n]}.csv')
             uniform_s = get_selected_data(datapath + f'/ids_dpp_{n_data_list[n]}.csv')
-    
+
             dpp_s_list = [
                 compute_f1(np.array(dpp_s.iloc[:, n_run]), Ks, Y)
                 for n_run in range(n_runs)
             ]
             dpp_f1[n] = np.mean(dpp_s_list)
             dpp_f1_std[n] = np.std(dpp_s_list) / np.sqrt(n_runs)
-    
+
             uniform_s_list = [
                 compute_f1(np.array(uniform_s.iloc[:, n_run]), Ks, Y)
                 for n_run in range(n_runs)
@@ -539,18 +529,18 @@ def _(
         for n in range(n_data):
             dpp = get_selected_data(datapath + f'/ids_dpp_{n_data_list[n]}.csv')
             uniform = get_selected_data(datapath + f'/ids_uniform_{n_data_list[n]}.csv')
-    
+
             dpp_list = [
                 compute_mse(np.array(dpp.iloc[:, n_run]), Ks, np.array(df["log_CMC"])) 
                 for n_run in range(n_runs)
             ]
             dpp_mse[n] = np.mean(dpp_list)
             dpp_mse_std[n] = np.std(dpp_list) / np.sqrt(n_runs)
-    
+
             uniform_list = [
                 compute_mse(np.array(uniform.iloc[:, n_run]), Ks, np.array(df["log_CMC"])) 
                 for n_run in range(n_runs)]
-    
+
             uniform_mse[n] = np.mean(uniform_list)
             uniform_mse_std[n] = np.std(uniform_list) / np.sqrt(n_runs)
 
@@ -564,19 +554,19 @@ def _(
         plt.xlabel("# of training data")
         plt.ylabel("MSE of log[CMC]")
         plt.show()
-    
+
     elif dropdown.value == "bees":
         bee_dpp_f1 = np.zeros(n_data)
         bee_dpp_f1_std = np.zeros(n_data)
         bee_uniform_f1 = np.zeros(n_data)
         bee_uniform_f1_std = np.zeros(n_data)
-    
+
         bee_Y = data["toxic"].to_numpy()
-    
+
         for n in range(n_data):
             bee_ids_molecule_mcmc = get_selected_data(datapath + f'/ids_dpp_{n_data_list[n]}.csv')
             bee_ids_molecule_uniform = get_selected_data(datapath + f'/ids_uniform_{n_data_list[n]}.csv')
-    
+
             bee_dpp_s_list = [
                 compute_f1(
                     np.array(bee_ids_molecule_mcmc.iloc[:, n_run]).ravel(), Ks, bee_Y, method="macro"
@@ -585,7 +575,7 @@ def _(
             ]
             bee_dpp_f1[n] = np.mean(bee_dpp_s_list)
             bee_dpp_f1_std[n] = np.std(bee_dpp_s_list) / np.sqrt(n_runs)
-    
+
             bee_uniform_s_list = [
                 compute_f1(
                     np.array(bee_ids_molecule_uniform.iloc[:, n_run]).ravel(), Ks, bee_Y, method="macro"
@@ -612,7 +602,6 @@ def _(
         plt.xlabel("# of training data")
         plt.ylabel("f1")
         plt.show()
-    
     return
 
 
