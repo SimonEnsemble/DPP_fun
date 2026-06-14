@@ -43,7 +43,7 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # read in and split data
+    # read in data
     """)
     return
 
@@ -55,39 +55,10 @@ def _(load_freesolv):
     return (dataset,)
 
 
-@app.cell
-def _(dataset, dc):
-    # splitter = dc.splits.ButinaSplitter()
-    splitter = dc.splits.RandomSplitter()
-
-    train_dataset, test_dataset = splitter.train_test_split(dataset)
-    return test_dataset, train_dataset
-
-
-@app.cell
-def _(test_dataset, train_dataset):
-    print("# train: ", len(train_dataset))
-    print("# test: ", len(test_dataset))
-    return
-
-
-@app.cell
-def _(train_dataset):
-    train_dataset
-    return
-
-
-@app.cell
-def _(test_dataset, train_dataset):
-    y_train = train_dataset.y
-    y_test = test_dataset.y
-    return y_test, y_train
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # descriptors
+    # featurize the molecules
     """)
     return
 
@@ -99,27 +70,48 @@ def _(dc):
 
 
 @app.cell
-def _():
-    # old, using mordred-community
-    # calc = Calculator(descriptors, ignore_3D=True)
-    # len(calc.descriptors)
-    # train_mols = [
-    #     Chem.MolFromSmiles(smi) for smi in train_dataset.ids
-    # ]
-    # train_descriptors = calc.pandas(train_mols)
+def _(dataset, featurizer):
+    _features = featurizer.featurize(dataset.ids)
+    smiles_to_features = dict(
+        zip(dataset.ids, _features)
+    )
+    smiles_to_features
+    return (smiles_to_features,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # test/train split
+    """)
     return
 
 
 @app.cell
-def _(featurizer, train_dataset):
-    X_train = featurizer.featurize(train_dataset.ids)
-    return (X_train,)
+def _(dc, np):
+    def train_test_split(dataset, smiles_to_features, verbose=True):
+        splitter = dc.splits.RandomSplitter()
+        train_dataset, test_dataset = splitter.train_test_split(dataset)
+    
+        if verbose:
+            print("# train: ", len(train_dataset))
+            print("# test: ", len(test_dataset))
+
+        X_train = np.array([smiles_to_features[sm] for sm in train_dataset.ids])
+        X_test  = np.array([smiles_to_features[sm] for sm in  test_dataset.ids])
+
+        y_train = train_dataset.y.ravel()
+        y_test = test_dataset.y.ravel()
+    
+        return X_train, y_train, X_test, y_test
+
+    return (train_test_split,)
 
 
 @app.cell
-def _(featurizer, test_dataset):
-    X_test = featurizer.featurize(test_dataset.ids)
-    return (X_test,)
+def _(dataset, smiles_to_features, train_test_split):
+    X_train, y_train, X_test, y_test = train_test_split(dataset, smiles_to_features)
+    return X_test, X_train, y_test, y_train
 
 
 @app.cell(hide_code=True)
@@ -131,25 +123,32 @@ def _(mo):
 
 
 @app.cell
-def _(StandardScaler, X_train, pairwise_kernels):
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_train)
-    gamma = 1.0 / (X_scaled.shape[1] * X_scaled.var())
-    L = pairwise_kernels(
-        X_scaled, metric='rbf', gamma=gamma
-    )
-    gamma
-    return (L,)
+def _(StandardScaler, pairwise_kernels):
+    def build_L(X_train, verbose=False):
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X_train)
+        gamma = 1.0 / (X_scaled.shape[1] * X_scaled.var())
+        if verbose:
+            print("gamma: ", gamma)
+        
+        L = pairwise_kernels(
+            X_scaled, metric='rbf', gamma=gamma
+        )
+        return L
+
+    return (build_L,)
 
 
 @app.cell
-def _(L, plt):
+def _(X_train, build_L, plt):
+    L = build_L(X_train, verbose=True)
+
     plt.figure(figsize=(10, 8))
     plt.imshow(L, cmap="coolwarm")
     plt.colorbar()
     plt.tight_layout()
     plt.show()
-    return
+    return (L,)
 
 
 @app.cell(hide_code=True)
@@ -167,8 +166,8 @@ def _(np):
 
 
 @app.cell
-def _(FiniteDPP, np, rng):
-    def grab_ids_train(X_train, k, L, sample_method):
+def _(FiniteDPP, build_L, np, rng):
+    def grab_ids_train(X_train, k, sample_method):
         n_train = X_train.shape[0]
 
         if sample_method == "uniform":
@@ -176,11 +175,13 @@ def _(FiniteDPP, np, rng):
                 np.arange(n_train), size=k, replace=False
             )
         if sample_method == "DPP":
+            L = build_L(X_train)
+        
             DPP = FiniteDPP('likelihood', **{'L': L})
             DPP.sample_mcmc_k_dpp(
                 size=k, 
                 random_state=rng, 
-                s_init=grab_ids_train(X_train, k, L, "uniform"),
+                s_init=grab_ids_train(X_train, k, "uniform"),
                 nb_iter=1000
             )
             ids_train = DPP.list_of_samples[-1][-1]
@@ -191,10 +192,10 @@ def _(FiniteDPP, np, rng):
 
 
 @app.cell
-def _(L, X_train, grab_ids_train):
-    _ids_train = grab_ids_train(X_train, 10, L, "DPP")
-    X_train[_ids_train].shape
-    _ids_train
+def _(X_train, grab_ids_train):
+    _ids_train = grab_ids_train(X_train, 10, "uniform")
+    X_train[_ids_train]#.shape
+    # _ids_train
     return
 
 
@@ -207,22 +208,38 @@ def _(mo):
 
 
 @app.cell
-def _(ExtraTreesRegressor, grab_ids_train, root_mean_squared_error, y_train):
-    def train_test(X_train, X_test, y_test, k, L, sample_method):
-        ids_train = grab_ids_train(X_train, k, L, sample_method)
+def _(
+    ExtraTreesRegressor,
+    grab_ids_train,
+    root_mean_squared_error,
+    train_test_split,
+):
+    def train_test_run(
+        dataset, smiles_to_features, k, verbose=False
+    ):
+        X_train, y_train, X_test, y_test = train_test_split(
+            dataset, smiles_to_features, verbose=verbose
+        )
 
-        erts = ExtraTreesRegressor()
-        erts.fit(X_train[ids_train], y_train[ids_train])
+        res = {}
+        for sample_method in ["uniform", "DPP"]:
+            ids_train = grab_ids_train(X_train, k, sample_method)
+    
+            erts = ExtraTreesRegressor()
+            erts.fit(X_train[ids_train], y_train[ids_train])
+    
+            y_test_pred = erts.predict(X_test)
+        
+            res[sample_method] = root_mean_squared_error(y_test, y_test_pred)
+        
+        return res
 
-        y_test_pred = erts.predict(X_test)
-        return root_mean_squared_error(y_test, y_test_pred)
-
-    return (train_test,)
+    return (train_test_run,)
 
 
 @app.cell
-def _(X_test):
-    X_test
+def _(dataset, smiles_to_features, train_test_run):
+    train_test_run(dataset, smiles_to_features, 10)
     return
 
 
@@ -239,9 +256,9 @@ def _(y_train):
 
 
 @app.cell
-def _(L, X_test, X_train, pd, train_test, y_test):
-    ks = [100, 200, 300]
-    n_runs = 10
+def _(L, X_test, X_train, ks, n_runs, pd, train_test, y_test):
+    # ks = [100, 200, 300]
+    # n_runs = 10
 
     rows = []
     ml_data = pd.DataFrame({"sample method": []})
@@ -260,6 +277,14 @@ def _(L, X_test, X_train, pd, train_test, y_test):
 @app.cell
 def _(ml_data, sns):
     sns.boxplot(data=ml_data, x="k", y="rmse", hue="sample_method", dodge=True)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # diverse smells
+    """)
     return
 
 
