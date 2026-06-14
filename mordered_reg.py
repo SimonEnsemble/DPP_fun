@@ -14,6 +14,7 @@ def _():
     from sklearn.decomposition import PCA
     from sklearn.metrics.pairwise import pairwise_kernels
     import numpy as np
+    from scipy.stats import entropy
     import matplotlib.pyplot as plt
     from sklearn.preprocessing import StandardScaler
     import seaborn as sns
@@ -29,6 +30,7 @@ def _():
         FiniteDPP,
         StandardScaler,
         dc,
+        entropy,
         load_freesolv,
         mo,
         np,
@@ -299,6 +301,8 @@ def _(ml_data, sns):
 def _(mo):
     mo.md(r"""
     # diverse smells
+
+    ## read in data
     """)
     return
 
@@ -317,12 +321,19 @@ def _(data_smells):
 
 
 @app.cell
+def _(np, unique_smells):
+    n_total_smells = len(np.unique(unique_smells))
+    n_total_smells
+    return (n_total_smells,)
+
+
+@app.cell
 def _(data_smells, unique_smells):
     y_smells = data_smells[unique_smells].apply(
         lambda row: row[row == 1].index.tolist(), axis=1
     ).tolist()
     y_smells
-    return
+    return (y_smells,)
 
 
 @app.cell
@@ -338,6 +349,14 @@ def _(data_smells, featurizer):
     return (X_smells,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## L-matrix for DPP
+    """)
+    return
+
+
 @app.cell
 def _(X_smells, build_L):
     L_smells = build_L(X_smells, verbose=True)
@@ -350,30 +369,101 @@ def _(L_smells, viz_L):
     return
 
 
-app._unparsable_cell(
-    r"""
-    def sample_label_dist(
-        k, sample_method, X_smells, L_smells, data_smells, y_smells
-    ):
-        ids = grab_ids_train(X_smells, k, sample_method, L=L_smells)
-        smell_counts = {}
-        for id in ids:
-            data_smells.iloc[]
-    """,
-    name="_"
-)
-
-
-@app.cell
-def _(L_smells, X_smells, data_smells, sample_label_dist):
-    sample_label_dist(
-        10, "uniform", X_smells, L_smells, data_smells
-    )
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## sample randoms sets, look at label dist'n
+    """)
     return
 
 
 @app.cell
-def _():
+def _(grab_ids_train, np):
+    def sample_label_dist(
+        k, sample_method, X_smells, y_smells, L_smells
+    ):
+        ids = grab_ids_train(X_smells, k, sample_method, L=L_smells)
+    
+        smells = np.concatenate([y_smells[id] for id in ids])
+    
+        unique, counts = np.unique(smells, return_counts=True)
+    
+        smell_distn = dict(zip(unique, counts))
+
+        return smell_distn
+
+    return (sample_label_dist,)
+
+
+@app.cell
+def _(entropy, np):
+    def score_entropy(smell_distn, n_total_smells):
+        full_counts = np.zeros(n_total_smells)
+        for i, (smell, count) in enumerate(smell_distn.items()):
+            full_counts[i] = count
+        p = full_counts / full_counts.sum()
+        return entropy(p)  # low if smells missing OR if distribution is skewed
+
+    return (score_entropy,)
+
+
+@app.cell
+def _(L_smells, X_smells, sample_label_dist, y_smells):
+    smell_distn = sample_label_dist(
+        10, "uniform", X_smells, y_smells, L_smells
+    )
+    smell_distn
+    return (smell_distn,)
+
+
+@app.cell
+def _(n_total_smells, score_entropy, smell_distn):
+    score_entropy(smell_distn, n_total_smells)
+    return
+
+
+@app.cell
+def _(pd, sample_label_dist, score_entropy):
+    def sample_smell_label_entropy(
+        k, X_smells, y_smells, L_smells, n_total_smells, n_runs=100
+    ):
+        rows = []
+        for r in range(n_runs):
+            for sample_method in ["DPP", "uniform"]:
+                smell_distn = sample_label_dist(
+                    k, sample_method, X_smells, y_smells, L_smells
+                )
+            
+                s = score_entropy(smell_distn, n_total_smells)
+
+                rows.append(
+                    {
+                        'sample method': sample_method, "k": k, "entropy": s
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    return (sample_smell_label_entropy,)
+
+
+@app.cell
+def _(
+    L_smells,
+    X_smells,
+    n_total_smells,
+    sample_smell_label_entropy,
+    y_smells,
+):
+    entropy_data = sample_smell_label_entropy(
+        50, X_smells, y_smells, L_smells, n_total_smells, n_runs=100
+    )
+    entropy_data
+    return (entropy_data,)
+
+
+@app.cell
+def _(entropy_data, sns):
+    sns.histplot(entropy_data, x="entropy", hue="sample method", element="step")
     return
 
 
