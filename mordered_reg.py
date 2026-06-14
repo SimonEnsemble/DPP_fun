@@ -417,6 +417,21 @@ def _(L_smells, X_smells, sample_label_dist, y_smells):
 
 
 @app.cell
+def _(n_total_smells, score_entropy):
+    score_entropy({'fruity': 1}, n_total_smells)
+    return
+
+
+@app.cell
+def _(n_total_smells, np, score_entropy, unique_smells):
+    max_ent = score_entropy(
+        dict(zip(unique_smells, np.ones(n_total_smells))), n_total_smells
+    )
+    max_ent
+    return (max_ent,)
+
+
+@app.cell
 def _(n_total_smells, score_entropy, smell_distn):
     score_entropy(smell_distn, n_total_smells)
     return
@@ -455,15 +470,22 @@ def _(
     y_smells,
 ):
     entropy_data = sample_smell_label_entropy(
-        50, X_smells, y_smells, L_smells, n_total_smells, n_runs=100
+        250, X_smells, y_smells, L_smells, n_total_smells, n_runs=100
     )
     entropy_data
     return (entropy_data,)
 
 
 @app.cell
-def _(entropy_data, sns):
-    sns.histplot(entropy_data, x="entropy", hue="sample method", element="step")
+def _(entropy_data, max_ent, plt, sns):
+    _p = sns.histplot(entropy_data, x="entropy", hue="sample method", element="step")
+    plt.xlim([0, max_ent])
+    _p
+    return
+
+
+@app.cell
+def _():
     return
 
 
