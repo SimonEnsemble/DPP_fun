@@ -111,7 +111,7 @@ def _(dc, np):
 @app.cell
 def _(dataset, smiles_to_features, train_test_split):
     X_train, y_train, X_test, y_test = train_test_split(dataset, smiles_to_features)
-    return X_test, X_train, y_test, y_train
+    return (X_train,)
 
 
 @app.cell(hide_code=True)
@@ -148,7 +148,7 @@ def _(X_train, build_L, plt):
     plt.colorbar()
     plt.tight_layout()
     plt.show()
-    return (L,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -221,7 +221,7 @@ def _(
             dataset, smiles_to_features, verbose=verbose
         )
 
-        res = {}
+        rmses = {}
         for sample_method in ["uniform", "DPP"]:
             ids_train = grab_ids_train(X_train, k, sample_method)
     
@@ -230,9 +230,9 @@ def _(
     
             y_test_pred = erts.predict(X_test)
         
-            res[sample_method] = root_mean_squared_error(y_test, y_test_pred)
+            rmses[sample_method] = root_mean_squared_error(y_test, y_test_pred)
         
-        return res
+        return rmses
 
     return (train_test_run,)
 
@@ -244,30 +244,22 @@ def _(dataset, smiles_to_features, train_test_run):
 
 
 @app.cell
-def _(L, X_test, X_train, train_test, y_test):
-    train_test(X_train, X_test, y_test, 10, L, "DPP")
-    return
-
-
-@app.cell
-def _(y_train):
-    len(y_train)
-    return
-
-
-@app.cell
-def _(L, X_test, X_train, ks, n_runs, pd, train_test, y_test):
-    # ks = [100, 200, 300]
-    # n_runs = 10
+def _(dataset, pd, smiles_to_features, train_test_run):
+    ks = [100, 200, 300]
+    n_runs = 5
 
     rows = []
-    ml_data = pd.DataFrame({"sample method": []})
-    for sample_method in ["DPP", "uniform"]:
-        for k in ks:
-            for r in range(n_runs):
-                rmse = train_test(X_train, X_test, y_test, k, L, sample_method)
+    for k in ks:
+        for r in range(n_runs):
+            rmses = train_test_run(dataset, smiles_to_features, k)
+            for sample_method in ["DPP", "uniform"]:
                 rows.append(
-                    {"sample_method": sample_method, "k": k, "run": r, "rmse": rmse}
+                    {
+                        "sample_method": sample_method, 
+                        "k": k, 
+                        "run": r, 
+                        "rmse": rmses[sample_method]
+                    }
                 )
     ml_data = pd.DataFrame(rows)
     ml_data
