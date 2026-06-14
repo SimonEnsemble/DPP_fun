@@ -140,14 +140,20 @@ def _(StandardScaler, pairwise_kernels):
 
 
 @app.cell
-def _(X_train, build_L, plt):
-    L = build_L(X_train, verbose=True)
+def _(plt):
+    def viz_L(L):
+        plt.figure(figsize=(10, 8))
+        plt.imshow(L, cmap="coolwarm")
+        plt.colorbar()
+        plt.tight_layout()
+        plt.show()
 
-    plt.figure(figsize=(10, 8))
-    plt.imshow(L, cmap="coolwarm")
-    plt.colorbar()
-    plt.tight_layout()
-    plt.show()
+    return (viz_L,)
+
+
+@app.cell
+def _(X_train, build_L):
+    L = build_L(X_train, verbose=True)
     return
 
 
@@ -167,7 +173,7 @@ def _(np):
 
 @app.cell
 def _(FiniteDPP, build_L, np, rng):
-    def grab_ids_train(X_train, k, sample_method):
+    def grab_ids_train(X_train, k, sample_method, L=None):
         n_train = X_train.shape[0]
 
         if sample_method == "uniform":
@@ -175,7 +181,8 @@ def _(FiniteDPP, build_L, np, rng):
                 np.arange(n_train), size=k, replace=False
             )
         if sample_method == "DPP":
-            L = build_L(X_train)
+            if L is None:
+                L = build_L(X_train)
         
             DPP = FiniteDPP('likelihood', **{'L': L})
             DPP.sample_mcmc_k_dpp(
@@ -243,10 +250,18 @@ def _(dataset, smiles_to_features, train_test_run):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # multiple runs over different train set sizes
+    """)
+    return
+
+
 @app.cell
 def _(dataset, pd, smiles_to_features, train_test_run):
-    ks = [100, 200, 300]
-    n_runs = 5
+    ks = [100, 150, 200, 250, 300]
+    n_runs = 0
 
     rows = []
     for k in ks:
@@ -266,6 +281,14 @@ def _(dataset, pd, smiles_to_features, train_test_run):
     return (ml_data,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    for typical performance see [here](https://moleculenet.org/full-results).
+    """)
+    return
+
+
 @app.cell
 def _(ml_data, sns):
     sns.boxplot(data=ml_data, x="k", y="rmse", hue="sample_method", dodge=True)
@@ -277,6 +300,80 @@ def _(mo):
     mo.md(r"""
     # diverse smells
     """)
+    return
+
+
+@app.cell
+def _(pd):
+    data_smells = pd.read_csv("https://raw.githubusercontent.com/SimonEnsemble/Leffingwell_Goodscents_combine/refs/heads/main/pyrfume.csv")
+    return (data_smells,)
+
+
+@app.cell
+def _(data_smells):
+    unique_smells = data_smells.columns[1:].values
+    unique_smells
+    return (unique_smells,)
+
+
+@app.cell
+def _(data_smells, unique_smells):
+    y_smells = data_smells[unique_smells].apply(
+        lambda row: row[row == 1].index.tolist(), axis=1
+    ).tolist()
+    y_smells
+    return
+
+
+@app.cell
+def _(data_smells):
+    data_smells
+    return
+
+
+@app.cell
+def _(data_smells, featurizer):
+    X_smells = featurizer.featurize(data_smells["molecule"].values)
+    X_smells
+    return (X_smells,)
+
+
+@app.cell
+def _(X_smells, build_L):
+    L_smells = build_L(X_smells, verbose=True)
+    return (L_smells,)
+
+
+@app.cell
+def _(L_smells, viz_L):
+    viz_L(L_smells)
+    return
+
+
+app._unparsable_cell(
+    r"""
+    def sample_label_dist(
+        k, sample_method, X_smells, L_smells, data_smells, y_smells
+    ):
+        ids = grab_ids_train(X_smells, k, sample_method, L=L_smells)
+        smell_counts = {}
+        for id in ids:
+            data_smells.iloc[]
+    """,
+    name="_"
+)
+
+
+@app.cell
+def _(L_smells, X_smells, data_smells, sample_label_dist):
+    sample_label_dist(
+        10, "uniform", X_smells, L_smells, data_smells
+    )
+    return
+
+
+@app.cell
+def _():
     return
 
 
