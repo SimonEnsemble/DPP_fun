@@ -20,6 +20,7 @@ def _():
     from sklearn.metrics.pairwise import pairwise_kernels
     from rdkit import Chem
     from rdkit.Chem import Draw
+    from rdkit.Chem import PandasTools
     import numpy as np
     from scipy.stats import entropy
     import matplotlib.pyplot as plt
@@ -40,6 +41,7 @@ def _():
         FiniteDPP,
         HandlerBase,
         PCA,
+        PandasTools,
         StandardScaler,
         TransformedBbox,
         combinations,
@@ -65,38 +67,62 @@ def _(mo):
 
 
 @app.cell
-def _():
-    molecule_to_smiles = {
-        "THC": "CCCCCC1=CC(=C2[C@@H]3C=C(CC[C@H]3C(OC2=C1)(C)C)C)O",
-        "CBD": "CCCCCC1=CC(=C(C(=C1)O)[C@@H]2C=C(CC[C@H]2C(=C)C)C)O",
-        "CBG": "CCCCCC1=CC(=C(C(=C1)O)C/C=C(\C)/CCC=C(C)C)O",
-        "CBN": "Oc2cc(cc1OC(c3c(c12)cc(cc3)C)(C)C)CCCCC",
-        "CBC": "CCCCCC1=CC(=C2C=CC(OC2=C1)(C)CCC=C(C)C)O",
-        # "terephthalic acid": "O=C(O)c1ccc(C(O)=O)cc1",
-        # "malic acid": "O=C(O)CC(O)C(=O)O"
-    }
-    molecules = list(molecule_to_smiles.keys())
-    smiles = list(molecule_to_smiles.values())
-    molecule_to_smiles
-    return molecules, smiles
+def _(PandasTools):
+    cannabinoids = PandasTools.LoadSDF(
+        "compounds.sdf", smilesName="SMILES", molColName="Molecule"
+    )
+    cannabinoid_ids = (
+        ["CDB00000" + str(i) for i in range(1, 10)] + 
+        ["CDB0000" + str(i) for i in range(10, 44)] # + 
+        # ["CDB0063" + str(i) for i in range(46, 53)] # terpenes
+    )
+    cannabinoids = cannabinoids[
+        cannabinoids["Cannabis Database ID"].isin(cannabinoid_ids)
+    ].reset_index()
+
+    # cory's names
+    cannabinoids["GENERIC_NAME"] = cannabinoids["GENERIC_NAME"].replace(
+        {
+            # see Cannabis compound database
+            "Cannabidiol": "CBD",
+            "Delta-9-tetrahydrocannabinol": "THC",
+            "Cannabigerol": "CBG",
+            "Cannabigerovarinic acid": "CBGVA",
+            "Cannabidivarin": "CBDV",
+            "Cannabichromene": "CBC",
+            "Cannabichromevarinic acid": "CBCVA",
+            "Cannabidiolic acid": "CBDA",
+            "Cannabigerolic acid monomethylether": "CBGAM",
+            "Cannabidivarinic acid": "CBDVA",
+            "Cannabigerolic acid": "CBGA"
+        }
+    )
+
+    cannabinoids
+    return (cannabinoids,)
 
 
 @app.cell
-def _(molecules):
-    nb_pairs = len(molecules) * (len(molecules) - 1)
-    nb_pairs
+def _(cannabinoids):
+    assert cannabinoids["GENERIC_NAME"].nunique() == cannabinoids.shape[0]
+    return
+
+
+@app.cell
+def _(cannabinoids):
+    cannabinoids["SMILES"].nunique()
     return
 
 
 @app.cell
 def _(Chem, Draw):
-    def draw_molecules(molecules, smiles, row=4):
-        mols = [Chem.MolFromSmiles(smiles) for smiles in smiles]
+    def draw_molecules(cannabinoids, row=4):
+        mols = [Chem.MolFromSmiles(smiles) for smiles in cannabinoids["SMILES"]]
         img = Draw.MolsToGridImage(
             mols,
             molsPerRow=row,
             subImgSize=(200, 200),
-            legends=molecules
+            legends=cannabinoids["GENERIC_NAME"].values
         )
         return img
 
@@ -104,8 +130,23 @@ def _(Chem, Draw):
 
 
 @app.cell
-def _(draw_molecules, molecules, smiles):
-    draw_molecules(molecules, smiles)
+def _():
+    cannabinoid_subset = [
+        "CBD", "THC", "CBG", "CBGVA", "CBDV", "CBC", "CBCVA",
+        "CBDA", "CBGAM", "CBDVA", "CBGA"
+    ]
+    return (cannabinoid_subset,)
+
+
+@app.cell
+def _(cannabinoid_subset, np):
+    assert len(np.unique(cannabinoid_subset)) == len(cannabinoid_subset)
+    return
+
+
+@app.cell
+def _(cannabinoids, draw_molecules):
+    draw_molecules(cannabinoids)
     return
 
 
@@ -124,17 +165,42 @@ def _(dc):
 
 
 @app.cell
-def _(featurizer, smiles):
-    X = featurizer.featurize(smiles)
+def _(cannabinoids, featurizer):
+    X = featurizer.featurize(cannabinoids["SMILES"])
     X
     return (X,)
 
 
 @app.cell
-def _(StandardScaler, X):
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    return (X_scaled,)
+def _(X):
+    X[0].shape # number of features
+    return
+
+
+@app.cell
+def _(combinations, np):
+    def look_for_duplicates(X):
+        n = X.shape[0]
+        same_rep = []
+        for i, j in combinations(range(n), 2):
+            if np.allclose(X[i], X[j]):
+                same_rep.append((i, j))
+        return same_rep
+
+    return (look_for_duplicates,)
+
+
+@app.cell
+def _(X, look_for_duplicates):
+    dups = look_for_duplicates(X)
+    dups
+    return
+
+
+@app.cell
+def _(cannabinoids, draw_molecules):
+    draw_molecules(cannabinoids.iloc[[17, 37]])
+    return
 
 
 @app.cell(hide_code=True)
@@ -143,6 +209,13 @@ def _(mo):
     # PCA
     """)
     return
+
+
+@app.cell
+def _(StandardScaler, X):
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    return (X_scaled,)
 
 
 @app.cell
@@ -166,13 +239,13 @@ def _(
     HandlerBase,
     TransformedBbox,
     X_reduced,
+    cannabinoid_subset,
+    cannabinoids,
     draw_molecules,
     matplotlib,
-    molecules,
     np,
     pca,
     plt,
-    smiles,
 ):
     class HandlerLineImage(HandlerBase):
         def __init__(self, image_data, space=15, offset=10):
@@ -221,47 +294,66 @@ def _(
             self.update_prop(image, orig_handle, legend)
             return [l, image]
 
-    fig, ax = plt.subplots(figsize=(6, 6))
-    ax.axhline(0, color="black", linewidth=1)
-    ax.axvline(0, color="black", linewidth=1)
+    def viz(X_reduced, cannabinoids, molecule_subset):
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.axhline(0, color="black", linewidth=1)
+        ax.axvline(0, color="black", linewidth=1)
 
-    lines = [[] for _ in range(len(smiles))]
-    imgs = [[] for _ in range(len(smiles))]
-    markers = ["o", "s", "^", "v", "<", ">", "D", "d", "p", "h", "X", "+", "*", "8", "|"]
-    for _i in range(len(molecules)):
-        smi = smiles[_i]
-        mol = molecules[_i]
-        imgs[_i] = np.asarray(draw_molecules([mol], [smi], row=1))
-    
-        (line,) = ax.plot(
-            X_reduced[_i, 0],
-            X_reduced[_i, 1],
-            linestyle="None",
-            marker=markers[_i],
-            markersize=8,
-            # markerfacecolor=smiles_to_color[smi],
-            # markeredgecolor=smiles_to_color[smi],
+
+
+        lines = [[] for _ in range(len(molecule_subset))]
+        imgs = [[] for _ in range(len(molecule_subset))]
+        markers = [
+            "s", "o", "^", "v", "<", ">", "D", "d", "p", "h", "X", "+", "*", "8", "|"
+        ]
+
+        id = -1
+        for i, row in cannabinoids.iterrows():
+            if not row["GENERIC_NAME"] in molecule_subset:
+                ax.plot(
+                    X_reduced[i, 0],
+                    X_reduced[i, 1],
+                    linestyle="None",
+                    marker="o",
+                    markersize=8,
+                    markerfacecolor="black",
+                    markeredgecolor="black"
+                )
+            else:
+                id += 1
+                imgs[id] = np.asarray(draw_molecules(cannabinoids.iloc[[i]], row=1))
+                (line,) = ax.plot(
+                    X_reduced[i, 0],
+                    X_reduced[i, 1],
+                    linestyle="None",
+                    marker=markers[id],
+                    markersize=10,
+                    # markerfacecolor=smiles_to_color[smi],
+                    # markeredgecolor=smiles_to_color[smi],
+                )
+                lines[id] = line
+
+        handler_map = {line: HandlerLineImage(img) for line, img in zip(lines, imgs)}
+        ax.legend(
+            lines,
+            [""] * len(lines),
+            handler_map=handler_map,
+            ncol=2,
+            loc="upper left",
+            bbox_to_anchor=(0.9, 1.4),
+            columnspacing=0.1,
+            handlelength=0.8,
+            labelspacing=0.1,
+            fontsize=80,
+            handleheight=1.2,
         )
-        lines[_i] = line
+        ax.set_xlabel("PC1 (" + str(np.round(pca.explained_variance_ratio_[0]*100, 0)) + "%)")
+        ax.set_ylabel("PC2 (" + str(np.round(pca.explained_variance_ratio_[1]*100, 0)) + "%)")
+        ax.set_aspect('equal', 'box')
+        # plt.savefig("pca.png", format="pdf", bbox_inches="tight")
+        plt.show()
 
-    handler_map = {line: HandlerLineImage(img) for line, img in zip(lines, imgs)}
-    ax.legend(
-        lines,
-        [""] * len(lines),
-        handler_map=handler_map,
-        ncol=2,
-        loc="upper left",
-        bbox_to_anchor=(0.9, 1.4),
-        columnspacing=0.1,
-        handlelength=0.8,
-        labelspacing=0.1,
-        fontsize=80,
-        handleheight=1.2,
-    )
-    ax.set_xlabel("PC1 (" + str(np.round(pca.explained_variance_ratio_[0], 2)) + ")")
-    ax.set_ylabel("PC2 (" + str(np.round(pca.explained_variance_ratio_[1], 2)) + ")")
-    # plt.savefig("pca.png", format="pdf", bbox_inches="tight")
-    plt.show()
+    viz(X_reduced, cannabinoids, cannabinoid_subset)
     return
 
 
@@ -289,11 +381,27 @@ def _(X_scaled, pairwise_kernels):
 
 
 @app.cell
-def _(L, molecules, pd, sns):
-    sns.heatmap(
-        pd.DataFrame(L, index=molecules, columns=molecules),
-        annot=True, fmt=".2f"
-    )
+def _(np, pd, plt, sns):
+    def viz_L_subset(L, cannabinoids, cannabinoid_subset):
+        ids = cannabinoids["GENERIC_NAME"].isin(cannabinoid_subset)
+        idx = np.where(ids)[0]
+    
+        names = cannabinoids[ids]["GENERIC_NAME"]
+        df = pd.DataFrame(
+            L[np.ix_(idx, idx)], index=names, columns=names
+        )
+    
+        sns.heatmap(df, annot=True, fmt=".2f", vmin=0.0, vmax=1.0)
+        plt.xlabel("cannabinoid")
+        plt.ylabel("cannabinoid")
+        plt.show()
+
+    return (viz_L_subset,)
+
+
+@app.cell
+def _(L, cannabinoid_subset, cannabinoids, viz_L_subset):
+    viz_L_subset(L, cannabinoids, cannabinoid_subset)
     return
 
 
@@ -323,7 +431,7 @@ def _(L, grab_minor):
 def _(combinations, grab_minor, np):
     def norm_factor(k, L):
         n = L.shape[0]
-    
+
         f = 0.0
         for ids in combinations(range(n), k):
             L_minor = grab_minor(L, ids)
@@ -351,7 +459,7 @@ def _(L, norm_factor):
 
 @app.cell
 def _(L, prob):
-    prob([1, 2], L)
+    prob([1, 4], L)
     return
 
 
@@ -391,10 +499,10 @@ def _(L, sample_molecules):
 
 @app.cell
 def _(L, np, sample_molecules):
-    n_sim = 1000
+    n_sim = 1
     np.sum(
         [sample_molecules(L, 2) for s in range(n_sim)] == np.array([1, 2])
-    )
+    ) / n_sim
     return
 
 
