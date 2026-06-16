@@ -425,7 +425,7 @@ def _(
         plt.show()
 
     viz(X_reduced, cannabinoids, cannabinoid_subset)
-    return
+    return (viz,)
 
 
 @app.cell(hide_code=True)
@@ -579,7 +579,14 @@ def _(L_sub, cannabinoid_subset, np, sample_molecules):
 
 @app.cell
 def _(L, cannabinoids, sample_molecules):
-    set(sample_molecules(L, 3, cannabinoids["GENERIC_NAME"].values))
+    dpp_cannabinoid_subset = sample_molecules(L, 3, cannabinoids["GENERIC_NAME"].values)
+    dpp_cannabinoid_subset
+    return (dpp_cannabinoid_subset,)
+
+
+@app.cell
+def _(X_reduced, cannabinoids, dpp_cannabinoid_subset, viz):
+    viz(X_reduced, cannabinoids, dpp_cannabinoid_subset)
     return
 
 
