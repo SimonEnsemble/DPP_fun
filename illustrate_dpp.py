@@ -78,7 +78,7 @@ def _(PandasTools):
     )
     cannabinoids = cannabinoids[
         cannabinoids["Cannabis Database ID"].isin(cannabinoid_ids)
-    ].reset_index()
+    ]
 
     # cory's names
     cannabinoids["GENERIC_NAME"] = cannabinoids["GENERIC_NAME"].replace(
@@ -94,12 +94,29 @@ def _(PandasTools):
             "Cannabidiolic acid": "CBDA",
             "Cannabigerolic acid monomethylether": "CBGAM",
             "Cannabidivarinic acid": "CBDVA",
-            "Cannabigerolic acid": "CBGA"
+            "Cannabigerolic acid": "CBGA",
+            "Delta-8-tetrahydrocannabinol": "delta-8-THC",
+            "Delta-9-tetrahydrocannabinol-C4": "THC-C4",
+            "Cannabicyclolic acid": "CBLA",
+            "Cannabicyclol": "CBL",
+            "Delta-9-cis-tetrahydrocannabinol": "cis-THC",
+            "Cannabielsoin": "CBE",
+            "Cannabinolic acid": "CBNA",
+            "Cannabinol": "CBN",
+            "Cannabinol methylether": "CBNM", 
+            "Cannabinol-C4": "CBN-C4", 
+            "Cannabivarin": "CBV"
         }
     )
 
+    # drop indistinguishable
+    drop_indistinguishable = True
+    if drop_indistinguishable:
+        cannabinoids = cannabinoids[cannabinoids["GENERIC_NAME"] != "cis-THC"]
+
+    cannabinoids = cannabinoids.reset_index()
     cannabinoids
-    return (cannabinoids,)
+    return cannabinoids, drop_indistinguishable
 
 
 @app.cell
@@ -130,11 +147,15 @@ def _(Chem, Draw):
 
 
 @app.cell
-def _():
+def _(cannabinoids):
     cannabinoid_subset = [
         "CBD", "THC", "CBG", "CBGVA", "CBDV", "CBC", "CBCVA",
-        "CBDA", "CBGAM", "CBDVA", "CBGA"
+        "CBDA", "CBGAM", "CBDVA", "CBGA", "delta-8-THC", "THC-C4", "CBL", "CBLA", 
+        "CBE", "CBNA", "CBV", "CBN-C4"
     ]
+    for _c in cannabinoid_subset:
+        assert _c in cannabinoids["GENERIC_NAME"].values, f"{_c} not found"
+    cannabinoid_subset = ["THC", "CBGA", "CBGAM", "CBLA", "CBDV", "CBD", "CBGVA"]
     return (cannabinoid_subset,)
 
 
@@ -160,13 +181,14 @@ def _(mo):
 
 @app.cell
 def _(dc):
-    featurizer = dc.feat.MordredDescriptors(ignore_3D=True)
+    # featurizer = dc.feat.MordredDescriptors(ignore_3D=True)
+    featurizer = dc.feat.RDKitDescriptors()
     return (featurizer,)
 
 
 @app.cell
 def _(cannabinoids, featurizer):
-    X = featurizer.featurize(cannabinoids["SMILES"])
+    X = featurizer.featurize(cannabinoids["SMILES"].values)
     X
     return (X,)
 
@@ -193,20 +215,25 @@ def _(combinations, np):
 @app.cell
 def _(X, look_for_duplicates):
     dups = look_for_duplicates(X)
+
+    # if drop_indistinguishable:
+    #     assert dups == []
+    
     dups
     return
 
 
 @app.cell
-def _(cannabinoids, draw_molecules):
-    draw_molecules(cannabinoids.iloc[[17, 37]])
+def _(cannabinoids, draw_molecules, drop_indistinguishable):
+    if not drop_indistinguishable:
+        draw_molecules(cannabinoids.iloc[[17, 37]])
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # PCA
+    # dim reduction
     """)
     return
 
@@ -216,6 +243,47 @@ def _(StandardScaler, X):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     return (X_scaled,)
+
+
+@app.cell
+def _(np):
+    def diffusion_map(L):
+        n = L.shape[0]
+    
+        # make row-stochastic matrix
+        L = L / L.sum(axis=1, keepdims=True)
+
+        evals, evecs = np.linalg.eig(L)
+        evals = evals.real
+        evecs = evecs.real
+
+        # sort by descending eigenvalue
+        order = np.argsort(evals)[::-1]
+        evals = evals[order]
+        evecs = evecs[:, order]
+
+        assert np.isclose(evals[0], 1.0), f"largest eigenvalue is {evals[0]}, not 1"
+
+        X_reduced = np.zeros((n, 2))
+        X_reduced[:, 0] = evecs[:, 1] * evals[1]  # 2nd eigenvector
+        X_reduced[:, 1] = evecs[:, 2] * evals[2] # 3rd eigenvector
+
+        return X_reduced
+
+    return (diffusion_map,)
+
+
+@app.cell
+def _(L, diffusion_map):
+    X_reduced_dm = diffusion_map(L)
+    X_reduced_dm
+    return
+
+
+@app.cell
+def _(X_reduced):
+    X_reduced.shape
+    return
 
 
 @app.cell
@@ -246,6 +314,7 @@ def _(
     np,
     pca,
     plt,
+    sns,
 ):
     class HandlerLineImage(HandlerBase):
         def __init__(self, image_data, space=15, offset=10):
@@ -306,6 +375,8 @@ def _(
         markers = [
             "s", "o", "^", "v", "<", ">", "D", "d", "p", "h", "X", "+", "*", "8", "|"
         ]
+        markers = markers + markers
+        colors = sns.color_palette("husl", len(molecule_subset))
 
         id = -1
         for i, row in cannabinoids.iterrows():
@@ -317,7 +388,7 @@ def _(
                     marker="o",
                     markersize=8,
                     markerfacecolor="black",
-                    markeredgecolor="black"
+                    markeredgecolor="black", zorder=0
                 )
             else:
                 id += 1
@@ -328,11 +399,11 @@ def _(
                     linestyle="None",
                     marker=markers[id],
                     markersize=10,
-                    # markerfacecolor=smiles_to_color[smi],
-                    # markeredgecolor=smiles_to_color[smi],
+                    markerfacecolor=colors[id],
+                    markeredgecolor=colors[id]
                 )
                 lines[id] = line
-
+    
         handler_map = {line: HandlerLineImage(img) for line, img in zip(lines, imgs)}
         ax.legend(
             lines,
@@ -366,32 +437,37 @@ def _(mo):
 
 
 @app.cell
-def _(X):
-    gamma = 1.0 / (X.shape[1] * X.var())
-    return
-
-
-@app.cell
 def _(X_scaled, pairwise_kernels):
     L = pairwise_kernels(
-        X_scaled, metric='rbf'#, gamma=gamma
+        X_scaled, metric='rbf'
     )
     L
     return (L,)
 
 
 @app.cell
-def _(np, pd, plt, sns):
+def _(np):
+    def grab_L_minor(L, cannabinoids, cannabinoid_subset):
+        ids = [
+            cannabinoids[cannabinoids["GENERIC_NAME"] == m].index[0] 
+            for m in cannabinoid_subset
+        ]
+
+        return L[np.ix_(ids, ids)]
+
+    return (grab_L_minor,)
+
+
+@app.cell
+def _(grab_L_minor, pd, plt, sns):
     def viz_L_subset(L, cannabinoids, cannabinoid_subset):
-        ids = cannabinoids["GENERIC_NAME"].isin(cannabinoid_subset)
-        idx = np.where(ids)[0]
+        L_sub = grab_L_minor(L, cannabinoids, cannabinoid_subset)
     
-        names = cannabinoids[ids]["GENERIC_NAME"]
         df = pd.DataFrame(
-            L[np.ix_(idx, idx)], index=names, columns=names
+            L_sub, index=cannabinoid_subset, columns=cannabinoid_subset
         )
     
-        sns.heatmap(df, annot=True, fmt=".2f", vmin=0.0, vmax=1.0)
+        sns.heatmap(df, annot=True, fmt=".2f", vmin=0.0, vmax=1.0, cmap="viridis")
         plt.xlabel("cannabinoid")
         plt.ylabel("cannabinoid")
         plt.show()
@@ -414,27 +490,20 @@ def _(mo):
 
 
 @app.cell
-def _(np):
-    def grab_minor(L, ids):
-        return np.array([[L[i, j] for j in ids] for i in ids])
-
-    return (grab_minor,)
-
-
-@app.cell
-def _(L, grab_minor):
-    grab_minor(L, [1, 3])
-    return
+def _(L, cannabinoid_subset, cannabinoids, grab_L_minor):
+    L_sub = grab_L_minor(L, cannabinoids, cannabinoid_subset)
+    L_sub
+    return (L_sub,)
 
 
 @app.cell
-def _(combinations, grab_minor, np):
-    def norm_factor(k, L):
+def _(combinations, grab_L_minor, np):
+    def norm_factor(k, L, cannabinoids):
         n = L.shape[0]
 
         f = 0.0
-        for ids in combinations(range(n), k):
-            L_minor = grab_minor(L, ids)
+        for cannabinoid_subset in combinations(cannabinoids["GENERIC_NAME"].values, k):
+            L_minor = grab_L_minor(L, cannabinoids, cannabinoid_subset)
             f += np.linalg.det(L_minor)
         return f
 
@@ -442,24 +511,35 @@ def _(combinations, grab_minor, np):
 
 
 @app.cell
-def _(grab_minor, norm_factor, np):
-    def prob(ids, L):
-        k = len(ids)
-        L_minor = grab_minor(L, ids)
-        return np.linalg.det(L_minor) / norm_factor(k, L)
-
-    return (prob,)
-
-
-@app.cell
-def _(L, norm_factor):
-    norm_factor(3, L)
+def _(L, cannabinoids, norm_factor):
+    p_norm = norm_factor(3, L, cannabinoids)
     return
 
 
 @app.cell
-def _(L, prob):
-    prob([1, 4], L)
+def _(grab_L_minor, np):
+    def prob_prop(L, cannabinoids, cannabinoid_subset):
+        L_minor = grab_L_minor(L, cannabinoids, cannabinoid_subset)
+        return np.linalg.det(L_minor)
+
+    return (prob_prop,)
+
+
+@app.cell
+def _(L, cannabinoids, prob_prop):
+    prob_prop(L, cannabinoids, ["THC", "CBD", "CBLA"])
+    return
+
+
+@app.cell
+def _(L, cannabinoids, prob_prop):
+    prob_prop(L, cannabinoids, ["CBD", "CBDV", "CBGVA"])
+    return
+
+
+@app.cell
+def _(L, cannabinoids, prob_prop):
+    prob_prop(L, cannabinoids, ["CBGA", "CBGAM", "CBGVA"])
     return
 
 
@@ -479,35 +559,39 @@ def _(np):
 
 @app.cell
 def _(FiniteDPP, np, rng):
-    def sample_molecules(L, k):
+    def sample_molecules(L, k, cannabinoid_list):
         DPP = FiniteDPP('likelihood', **{'L': L})
         DPP.sample_mcmc_k_dpp(
-            size=k, 
+            size=k,
             random_state=rng,
             nb_iter=1000
         )
-        return np.sort(DPP.list_of_samples[-1][-1])
+        return cannabinoid_list[np.sort(DPP.list_of_samples[-1][-1])]
 
     return (sample_molecules,)
 
 
 @app.cell
-def _(L, sample_molecules):
-    sample_molecules(L, 2)
+def _(L_sub, cannabinoid_subset, np, sample_molecules):
+    sample_molecules(L_sub, 3, np.array(cannabinoid_subset))
     return
 
 
 @app.cell
-def _(L, np, sample_molecules):
-    n_sim = 1
+def _(L, cannabinoids, sample_molecules):
+    set(sample_molecules(L, 3, cannabinoids["GENERIC_NAME"].values))
+    return
+
+
+@app.cell
+def _(L, cannabinoids, np, sample_molecules):
+    n_sim = 1000
     np.sum(
-        [sample_molecules(L, 2) for s in range(n_sim)] == np.array([1, 2])
+        [
+            set(sample_molecules(L, 3, cannabinoids["GENERIC_NAME"].values))
+            for s in range(n_sim)
+        ] == set(["THC", "CBD", "CBLA"])
     ) / n_sim
-    return
-
-
-@app.cell
-def _():
     return
 
 
